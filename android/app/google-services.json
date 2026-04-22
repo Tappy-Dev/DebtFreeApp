@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "736667996095",
+    "project_id": "debt-free-app-f3ce0",
+    "storage_bucket": "debt-free-app-f3ce0.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:736667996095:android:1f16c4d45ae1f791131b0a",
+        "android_client_info": {
+          "package_name": "com.example.debt_free_app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCBOlOO1AzUPVFMmXipnxdMHOaeuYxBC_Y"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

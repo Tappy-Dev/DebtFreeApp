@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Debt Free App – Competitor Pricing Analysis</title>
+    <style>
+        @page { margin: 2cm; }
+        body {
+            font-family: 'Segoe UI', Arial, sans-serif;
+            line-height: 1.6;
+            color: #1a1a1a;
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 40px;
+            background: #fff;
+        }
+        h1 {
+            color: #1e3a5f;
+            border-bottom: 3px solid #2e7d32;
+            padding-bottom: 12px;
+            font-size: 28px;
+        }
+        h2 {
+            color: #2e7d32;
+            margin-top: 36px;
+            font-size: 20px;
+            border-left: 4px solid #2e7d32;
+            padding-left: 12px;
+        }
+        h3 {
+            color: #1e3a5f;
+            margin-top: 24px;
+            font-size: 16px;
+        }
+        .date {
+            color: #666;
+            font-size: 14px;
+            margin-top: -8px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 16px 0;
+            font-size: 13px;
+        }
+        th {
+            background: #1e3a5f;
+            color: white;
+            padding: 10px 12px;
+            text-align: left;
+            font-weight: 600;
+        }
+        td {
+            padding: 8px 12px;
+            border-bottom: 1px solid #e0e0e0;
+        }
+        tr:nth-child(even) { background: #f8faf8; }
+        tr:hover { background: #e8f5e9; }
+        .highlight {
+            background: #e8f5e9;
+            border: 1px solid #c8e6c9;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+        .highlight h3 { margin-top: 0; }
+        .price-box {
+            background: #1e3a5f;
+            color: white;
+            border-radius: 8px;
+            padding: 20px;
+            text-align: center;
+            margin: 20px 0;
+        }
+        .price-box .price {
+            font-size: 36px;
+            font-weight: bold;
+            margin: 8px 0;
+        }
+        .price-box .annual {
+            font-size: 18px;
+            opacity: 0.9;
+        }
+        .price-box .note {
+            font-size: 13px;
+            opacity: 0.7;
+            margin-top: 8px;
+        }
+        .check { color: #2e7d32; font-weight: bold; }
+        .cross { color: #c62828; }
+        .section-divider {
+            border: none;
+            border-top: 2px solid #e0e0e0;
+            margin: 32px 0;
+        }
+        ul { padding-left: 20px; }
+        li { margin-bottom: 6px; }
+        .footer {
+            margin-top: 40px;
+            padding-top: 16px;
+            border-top: 1px solid #e0e0e0;
+            font-size: 12px;
+            color: #888;
+            text-align: center;
+        }
+        @media print {
+            body { padding: 0; }
+            .price-box { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+            th { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+        }
+    </style>
+</head>
+<body>
+
+<h1>Debt Free App — Competitor Pricing Analysis</h1>
+<p class="date">Prepared: 19 April 2026</p>
+
+<h2>1. Market Landscape — Competitor Pricing</h2>
+
+<table>
+    <thead>
+        <tr>
+            <th>App</th>
+            <th>Model</th>
+            <th>Pricing</th>
+            <th>Downloads</th>
+            <th>Rating</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td><strong>YNAB</strong></td>
+            <td>Subscription</td>
+            <td>$14.99/mo or $109/yr ($9.08/mo)</td>
+            <td>1M+</td>
+            <td>4.6★</td>
+        </tr>
+        <tr>
+            <td><strong>Debt Payoff Planner</strong> (OxbowSoft)</td>
+            <td>Freemium + Sub</td>
+            <td>~$4.99–6.99/mo (ads + IAP)</td>
+            <td>500K+</td>
+            <td>4.4★</td>
+        </tr>
+        <tr>
+            <td><strong>Debt Payoff Box</strong> (Apps of the Future UK)</td>
+            <td>Freemium (2 debts free)</td>
+            <td>In-app purchases</td>
+            <td>10K+</td>
+            <td>3.6★</td>
+        </tr>
+        <tr>
+            <td><strong>Debt Payoff Planner: Snowball</strong> (LKPixel)</td>
+            <td>Freemium + ads</td>
+            <td>One-time premium purchase</td>
+            <td>500+</td>
+            <td>New</td>
+        </tr>
+        <tr>
+            <td><strong>DebtTrack</strong> (Devonshire Logic)</td>
+            <td>Paid upfront</td>
+            <td>£3.59 one-time</td>
+            <td>Small</td>
+            <td>—</td>
+        </tr>
+        <tr>
+            <td><strong>PocketGuard</strong></td>
+            <td>Freemium + Sub</td>
+            <td>~$7.99/mo or $34.99/yr</td>
+            <td>Large</td>
+            <td>4.2★</td>
+        </tr>
+    </tbody>
+</table>
+
+<p><strong>Key observation:</strong> A reviewer on Debt Payoff Planner (OxbowSoft) noted "the monthly cost is a little high" for the subscription. Debt Payoff Box received negative reviews for limiting free users to only 2 debts.</p>
+
+<hr class="section-divider">
+
+<h2>2. Feature Comparison — Competitive Advantages</h2>
+
+<table>
+    <thead>
+        <tr>
+            <th>Feature</th>
+            <th>Debt Free App</th>
+            <th>Debt Payoff Planner</th>
+            <th>YNAB</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td>Per-debt extra payments</td>
+            <td class="check">✔</td>
+            <td class="cross">✘</td>
+            <td class="cross">✘</td>
+        </tr>
+        <tr>
+            <td>UK PAYE / NI / Student Loan tax engine</td>
+            <td class="check">✔</td>
+            <td class="cross">✘</td>
+            <td class="cross">✘</td>
+        </tr>
+        <tr>
+            <td>Mortgage overpayment simulator</td>
+            <td class="check">✔</td>
+            <td>Basic</td>
+            <td class="cross">✘</td>
+        </tr>
+        <tr>
+            <td>Salary sacrifice calculator</td>
+            <td class="check">✔</td>
+            <td class="cross">✘</td>
+            <td class="cross">✘</td>
+        </tr>
+        <tr>
+            <td>AI insights (Gemini 2.5 Flash)</td>
+            <td class="check">✔</td>
+            <td class="cross">✘</td>
+            <td class="cross">✘</td>
+        </tr>
+        <tr>
+            <td>Scenario what-if builder</td>
+            <td class="check">✔</td>
+            <td>Basic slider</td>
+            <td class="cross">✘</td>
+        </tr>
+        <tr>
+            <td>Monthly budget tracking</td>
+            <td class="check">✔</td>
+            <td class="cross">✘</td>
+            <td class="check">✔ (core)</td>
+        </tr>
+        <tr>
+            <td>Planner with what-if events</td>
+            <td class="check">✔</td>
+            <td class="cross">✘</td>
+            <td class="cross">✘</td>
+        </tr>
+        <tr>
+            <td>Avalanche + Snowball strategies</td>
+            <td class="check">✔</td>
+            <td class="check">✔</td>
+            <td>Partial</td>
+        </tr>
+        <tr>
+            <td>No ads, privacy-focused</td>
+            <td class="check">✔</td>
+            <td class="cross">✘ (ads)</td>
+            <td class="check">✔</td>
+        </tr>
+        <tr>
+            <td>Bank sync / Open Banking</td>
+            <td class="cross">✘</td>
+            <td class="cross">✘</td>
+            <td class="check">✔</td>
+        </tr>
+        <tr>
+            <td>Multi-device sync</td>
+            <td class="cross">✘</td>
+            <td class="check">✔</td>
+            <td class="check">✔</td>
+        </tr>
+    </tbody>
+</table>
+
+<hr class="section-divider">
+
+<h2>3. Recommended Pricing</h2>
+
+<div class="price-box">
+    <div>Recommended Monthly Price</div>
+    <div class="price">£3.99/month</div>
+    <div class="annual">or £29.99/year (£2.50/mo — 37% saving)</div>
+    <div class="note">Below YNAB ($14.99/mo) · Above simple calculators (£0–5 one-time)</div>
+</div>
+
+<h3>Rationale</h3>
+<ul>
+    <li><strong>Below YNAB</strong> — YNAB is a full-budget platform with bank sync, live support, and 1M+ users. You're not competing at their scale or cost base yet.</li>
+    <li><strong>Above pure debt calculators</strong> — Your app provides significantly more value than simple debt snowball calculators through AI insights, UK tax engine, mortgage simulator, and scenario planning.</li>
+    <li><strong>UK market positioning</strong> — The UK personal finance app market is underserved vs. the US. £3.99/mo is the "impulse subscribe" threshold for UK consumers.</li>
+    <li><strong>AI operating costs covered</strong> — Firebase AI (Gemini) has per-request costs that a subscription model sustains.</li>
+    <li><strong>Competitive with niche competitors</strong> — Undercuts OxbowSoft's subscription (their users complain it's "a little high") while offering more features.</li>
+</ul>
+
+<hr class="section-divider">
+
+<h2>4. Suggested Free vs Premium Split</h2>
+
+<table>
+    <thead>
+        <tr>
+            <th>Free Tier</th>
+            <th>Premium (£3.99/mo)</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td>Up to 2 debts</td>
+            <td>Unlimited debts</td>
+        </tr>
+        <tr>
+            <td>Basic payoff timeline chart</td>
+            <td>Per-debt extra payment allocation</td>
+        </tr>
+        <tr>
+            <td>Budget overview (view only)</td>
+            <td>Full budget management + monthly tracking</td>
+        </tr>
+        <tr>
+            <td>Avalanche / Snowball selection</td>
+            <td>Mortgage overpayment simulator</td>
+        </tr>
+        <tr>
+            <td>—</td>
+            <td>Scenario what-if builder</td>
+        </tr>
+        <tr>
+            <td>—</td>
+            <td>AI Insights (Gemini-powered)</td>
+        </tr>
+        <tr>
+            <td>—</td>
+            <td>Salary sacrifice calculator</td>
+        </tr>
+        <tr>
+            <td>—</td>
+            <td>Planner with what-if events</td>
+        </tr>
+        <tr>
+            <td>—</td>
+            <td>Data export / import</td>
+        </tr>
+    </tbody>
+</table>
+
+<hr class="section-divider">
+
+<h2>5. Alternative Price Points</h2>
+
+<table>
+    <thead>
+        <tr>
+            <th>Strategy</th>
+            <th>Monthly</th>
+            <th>Annual</th>
+            <th>When to use</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td>Aggressive growth</td>
+            <td>£2.49/mo</td>
+            <td>£19.99/yr</td>
+            <td>Maximise installs, build user base fast</td>
+        </tr>
+        <tr>
+            <td><strong>Recommended</strong></td>
+            <td><strong>£3.99/mo</strong></td>
+            <td><strong>£29.99/yr</strong></td>
+            <td>Balance value perception + accessibility</td>
+        </tr>
+        <tr>
+            <td>Premium positioning</td>
+            <td>£4.99/mo</td>
+            <td>£39.99/yr</td>
+            <td>Emphasise AI + UK tax intelligence</td>
+        </tr>
+        <tr>
+            <td>Future (with Open Banking)</td>
+            <td>£6.99/mo</td>
+            <td>£54.99/yr</td>
+            <td>Only after adding bank sync / connected accounts</td>
+        </tr>
+    </tbody>
+</table>
+
+<hr class="section-divider">
+
+<h2>6. Key Takeaways</h2>
+
+<div class="highlight">
+    <h3>Summary</h3>
+    <ul>
+        <li><strong>£3.99/month</strong> (or £29.99/year) is the sweet spot for a UK-focused niche app with AI features and no established brand recognition.</li>
+        <li><strong>AI Insights</strong> should be the flagship premium feature — it's unique in the market and has real operating costs.</li>
+        <li><strong>Free tier limited to 2 debts</strong> provides enough value to demonstrate the app while creating clear upgrade motivation.</li>
+        <li><strong>Annual discount (37%)</strong> encourages commitment and reduces churn.</li>
+        <li>Future price increases to £4.99–6.99 are justified once you add Open Banking integration or multi-device sync.</li>
+    </ul>
+</div>
+
+<div class="footer">
+    <p>Debt Free App — Competitor Pricing Analysis · April 2026</p>
+    <p>Data sources: Google Play Store, Apple App Store, YNAB.com · All prices as of April 2026</p>
+</div>
+
+</body>
+</html>

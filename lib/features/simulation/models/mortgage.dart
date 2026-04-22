@@ -1,0 +1,46 @@
+class Mortgage {
+  const Mortgage({
+    this.id = 'mortgage',
+    this.name = 'Mortgage',
+    required this.balance,
+    required this.annualRate,
+    required this.monthlyPayment,
+    required this.remainingTermMonths,
+    this.overpayment = 0,
+  });
+
+  final String id;
+  final String name;
+  final double balance;
+  final double annualRate;
+  final double monthlyPayment;
+  final int remainingTermMonths;
+
+  /// Extra monthly amount the user pays on top of the standard payment.
+  final double overpayment;
+
+  double get monthlyInterest =>
+      balance <= 0 || annualRate <= 0 ? 0 : balance * (annualRate / 100) / 12;
+
+  double get totalMonthlyPayment => monthlyPayment + overpayment;
+
+  Mortgage copyWith({
+    String? id,
+    String? name,
+    double? balance,
+    double? annualRate,
+    double? monthlyPayment,
+    int? remainingTermMonths,
+    double? overpayment,
+  }) {
+    return Mortgage(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      balance: balance ?? this.balance,
+      annualRate: annualRate ?? this.annualRate,
+      monthlyPayment: monthlyPayment ?? this.monthlyPayment,
+      remainingTermMonths: remainingTermMonths ?? this.remainingTermMonths,
+      overpayment: overpayment ?? this.overpayment,
+    );
+  }
+}

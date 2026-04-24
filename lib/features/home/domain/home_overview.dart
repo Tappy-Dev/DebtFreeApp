@@ -40,6 +40,7 @@ class HomeOverview {
     required this.recommendationMessage,
     required this.debtChartData,
     this.mortgage,
+    this.mortgageCount = 0,
     this.mortgagePayoffLabel,
     this.mortgageTotalInterest,
     this.monthlyDebtInterest = 0,
@@ -68,6 +69,7 @@ class HomeOverview {
   final String recommendationMessage;
   final List<TimelineDataPoint> debtChartData;
   final Mortgage? mortgage;
+  final int mortgageCount;
   final String? mortgagePayoffLabel;
   final double? mortgageTotalInterest;
   final double monthlyDebtInterest;

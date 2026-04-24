@@ -1,9 +1,10 @@
 import 'dart:convert';
 
 import 'package:debt_free_app/core/data/session_financial_repository.dart';
+import 'package:debt_free_app/core/services/ai_usage_service.dart';
 import 'package:debt_free_app/core/services/subscription_service.dart';
-import 'package:debt_free_app/core/utils/financial_month.dart';
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
 
@@ -16,181 +17,12 @@ class SettingsScreen extends StatefulWidget {
 
 class _SettingsScreenState extends State<SettingsScreen> {
   final _repository = SessionFinancialRepository.instance;
+  final _aiUsageService = AiUsageService.instance;
 
-  Future<void> _pickStartMonth() async {
-    final now = DateTime.now();
-    int selectedYear = now.year;
-    int selectedMonth = now.month;
-
-    final result = await showDialog<DateTime>(
-      context: context,
-      builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setDialogState) {
-            final months = [
-              'January', 'February', 'March', 'April', 'May', 'June',
-              'July', 'August', 'September', 'October', 'November', 'December',
-            ];
-            return AlertDialog(
-              title: const Text('Set Budget Start Month'),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Text('Choose the earliest month that should appear in Tracking.'),
-                  const SizedBox(height: 20),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: DropdownButtonFormField<int>(
-                          decoration: const InputDecoration(
-                            labelText: 'Month',
-                            border: OutlineInputBorder(),
-                          ),
-                          value: selectedMonth,
-                          items: List.generate(
-                            12,
-                            (i) => DropdownMenuItem(
-                              value: i + 1,
-                              child: Text(months[i]),
-                            ),
-                          ),
-                          onChanged: (v) =>
-                              setDialogState(() => selectedMonth = v!),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: DropdownButtonFormField<int>(
-                          decoration: const InputDecoration(
-                            labelText: 'Year',
-                            border: OutlineInputBorder(),
-                          ),
-                          value: selectedYear,
-                          items: List.generate(
-                            now.year - (now.year - 5) + 1,
-                            (i) => DropdownMenuItem(
-                              value: now.year - 5 + i,
-                              child: Text('${now.year - 5 + i}'),
-                            ),
-                          ),
-                          onChanged: (v) =>
-                              setDialogState(() => selectedYear = v!),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text('Cancel'),
-                ),
-                FilledButton(
-                  onPressed: () => Navigator.pop(
-                    context,
-                    DateTime(selectedYear, selectedMonth),
-                  ),
-                  child: const Text('Set'),
-                ),
-              ],
-            );
-          },
-        );
-      },
-    );
-
-    if (result == null || !mounted) return;
-    final monthKey =
-        '${result.year}-${result.month.toString().padLeft(2, '0')}';
-    await _repository.setAppStartMonth(monthKey);
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Budget start month set to ${DateFormat.yMMMM().format(result)}',
-          ),
-          duration: const Duration(seconds: 2),
-        ),
-      );
-    }
-  }
-
-  Future<void> _pickFinancialMonthStartDay(int currentDay) async {
-    int selected = currentDay;
-    final result = await showDialog<int>(
-      context: context,
-      builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setDialogState) {
-            return AlertDialog(
-              title: const Text('Financial Month Start Day'),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Text(
-                    'Choose the day of the month your financial cycle begins '
-                    '(e.g. your pay day).',
-                  ),
-                  const SizedBox(height: 20),
-                  DropdownButtonFormField<int>(
-                    decoration: const InputDecoration(
-                      labelText: 'Day of Month',
-                      border: OutlineInputBorder(),
-                    ),
-                    value: selected,
-                    items: List.generate(
-                      28,
-                      (i) => DropdownMenuItem(
-                        value: i + 1,
-                        child: Text('${_ordinal(i + 1)}'),
-                      ),
-                    ),
-                    onChanged: (v) =>
-                        setDialogState(() => selected = v!),
-                  ),
-                ],
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text('Cancel'),
-                ),
-                FilledButton(
-                  onPressed: () => Navigator.pop(context, selected),
-                  child: const Text('Set'),
-                ),
-              ],
-            );
-          },
-        );
-      },
-    );
-
-    if (result == null || !mounted) return;
-    await _repository.setFinancialMonthStartDay(result);
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            result == 1
-                ? 'Financial month reset to calendar month'
-                : 'Financial month starts on the ${_ordinal(result)}',
-          ),
-          duration: const Duration(seconds: 2),
-        ),
-      );
-    }
-  }
-
-  static String _ordinal(int n) {
-    if (n >= 11 && n <= 13) return '${n}th';
-    switch (n % 10) {
-      case 1: return '${n}st';
-      case 2: return '${n}nd';
-      case 3: return '${n}rd';
-      default: return '${n}th';
-    }
+  @override
+  void initState() {
+    super.initState();
+    _aiUsageService.initialize(_repository.database);
   }
 
   @override
@@ -203,23 +35,76 @@ class _SettingsScreenState extends State<SettingsScreen> {
         child: ListView(
           padding: const EdgeInsets.all(20),
           children: <Widget>[
+            // ── Finance Settings ──
             Card(
-              child: Padding(
-                padding: const EdgeInsets.all(20),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: <Widget>[
-                    Text(
-                      'App Info',
-                      style: theme.textTheme.titleLarge,
-                    ),
-                    const SizedBox(height: 12),
-                    const Text('Debt Free v1.0.0'),
-                    const SizedBox(height: 8),
-                    const Text(
-                      'Budget tracking, debt repayment strategies, mortgage overpayment analysis, salary sacrifice modelling, what-if scenario planning, and AI-powered financial advice — all in one place.',
-                    ),
-                  ],
+              child: InkWell(
+                borderRadius: BorderRadius.circular(12),
+                onTap: () => context.push('/settings/finance'),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 20, vertical: 16),
+                  child: Row(
+                    children: [
+                      Icon(Icons.account_balance_outlined,
+                          color: theme.colorScheme.primary),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('Finance Settings',
+                                style: theme.textTheme.titleMedium),
+                            const SizedBox(height: 2),
+                            Text(
+                              'Budget start month & financial month start day',
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: theme.colorScheme.onSurfaceVariant,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Icon(Icons.chevron_right,
+                          color: theme.colorScheme.onSurfaceVariant),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            // ── About ──
+            Card(
+              child: InkWell(
+                borderRadius: BorderRadius.circular(12),
+                onTap: () => context.push('/settings/about'),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 20, vertical: 16),
+                  child: Row(
+                    children: [
+                      Icon(Icons.info_outline_rounded,
+                          color: theme.colorScheme.primary),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('About',
+                                style: theme.textTheme.titleMedium),
+                            const SizedBox(height: 2),
+                            Text(
+                              'App info & data privacy',
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: theme.colorScheme.onSurfaceVariant,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Icon(Icons.chevron_right,
+                          color: theme.colorScheme.onSurfaceVariant),
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -313,7 +198,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             Card(
               child: InkWell(
                 borderRadius: BorderRadius.circular(12),
-                onTap: () => _showBugReport(context),
+                onTap: () => _showFeedbackDialog(context),
                 child: Padding(
                   padding: const EdgeInsets.all(20),
                   child: Row(
@@ -322,13 +207,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         width: 40,
                         height: 40,
                         decoration: BoxDecoration(
-                          color: theme.colorScheme.errorContainer,
+                          color: theme.colorScheme.secondaryContainer,
                           borderRadius: BorderRadius.circular(10),
                         ),
                         child: Icon(
-                          Icons.bug_report_outlined,
+                          Icons.feedback_outlined,
                           size: 20,
-                          color: theme.colorScheme.onErrorContainer,
+                          color: theme.colorScheme.onSecondaryContainer,
                         ),
                       ),
                       const SizedBox(width: 14),
@@ -337,14 +222,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              'Submit a Bug',
+                              'Submit Bug / Request Feature',
                               style: theme.textTheme.titleSmall?.copyWith(
                                 fontWeight: FontWeight.w600,
                               ),
                             ),
                             const SizedBox(height: 2),
                             Text(
-                              'Report an issue or something that doesn\'t look right',
+                              'Report an issue or suggest a new feature',
                               style: theme.textTheme.bodySmall?.copyWith(
                                 color: theme.colorScheme.onSurfaceVariant,
                               ),
@@ -368,12 +253,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
               child: Padding(
                 padding: const EdgeInsets.all(20),
                 child: ListenableBuilder(
-                  listenable: _repository,
+                  listenable: Listenable.merge([
+                    _repository,
+                    SubscriptionService.instance,
+                    _aiUsageService,
+                  ]),
                   builder: (context, _) {
                     final enabled = _repository.developerModeEnabled;
                     final offset = _repository.developerMonthOffset;
                     final previewDate = _repository.effectiveNow;
                     final previewMonthLabel = DateFormat.yMMMM().format(previewDate);
+                    final sub = SubscriptionService.instance;
                     return Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: <Widget>[
@@ -400,7 +290,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             color: theme.colorScheme.onSurfaceVariant,
                           ),
                         ),
-                        if (enabled) ...[
+                        if (enabled) ...[      
                           const SizedBox(height: 16),
                           Text(
                             'Month offset: ${offset >= 0 ? '+' : ''}$offset',
@@ -434,234 +324,84 @@ class _SettingsScreenState extends State<SettingsScreen> {
                               child: const Text('Reset Offset'),
                             ),
                           ),
+                          const Divider(height: 24),
+                          Text(
+                            'Access state',
+                            style: theme.textTheme.titleSmall,
+                          ),
+                          const SizedBox(height: 8),
+                          DropdownButtonFormField<DeveloperAccessScenario>(
+                            initialValue: sub.developerAccessScenario,
+                            decoration: const InputDecoration(
+                              labelText: 'Subscription / trial state',
+                              border: OutlineInputBorder(),
+                            ),
+                            items: DeveloperAccessScenario.values
+                                .map(
+                                  (scenario) => DropdownMenuItem<DeveloperAccessScenario>(
+                                    value: scenario,
+                                    child: Text(
+                                      _developerAccessScenarioLabel(scenario),
+                                    ),
+                                  ),
+                                )
+                                .toList(growable: false),
+                            onChanged: (value) async {
+                              if (value == null) return;
+                              await sub.setDeveloperAccessScenario(value);
+                              await _aiUsageService.refresh();
+                            },
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            _developerAccessScenarioDescription(
+                              sub.developerAccessScenario,
+                            ),
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: theme.colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          Align(
+                            alignment: Alignment.centerLeft,
+                            child: OutlinedButton.icon(
+                              onPressed: () async {
+                                await sub.setDeveloperAccessScenario(
+                                  DeveloperAccessScenario.activeTrial,
+                                );
+                                await _aiUsageService.setTrialUsageExhausted();
+                                if (!context.mounted) return;
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text('Trial exhausted simulated (3/3 prompts)'),
+                                  ),
+                                );
+                              },
+                              icon: const Icon(Icons.report_gmailerrorred_rounded, size: 18),
+                              label: const Text('Simulate trial exhausted'),
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Align(
+                            alignment: Alignment.centerLeft,
+                            child: OutlinedButton.icon(
+                              onPressed: () async {
+                                await _aiUsageService.resetAllUsage();
+                                if (!context.mounted) return;
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text('AI usage counters reset'),
+                                  ),
+                                );
+                              },
+                              icon: const Icon(Icons.refresh_rounded, size: 18),
+                              label: const Text('Reset AI usage counters'),
+                            ),
+                          ),
                         ],
                       ],
                     );
                   },
-                ),
-              ),
-            ),
-            const SizedBox(height: 16),
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(20),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: <Widget>[
-                    Text(
-                      'Budget Start Month',
-                      style: theme.textTheme.titleLarge,
-                    ),
-                    const SizedBox(height: 8),
-                    const Text(
-                      'Sets how far back you can navigate in the Tracking screen. '
-                      'Use this to prevent accidental creation of empty months before your app start date.',
-                    ),
-                    const SizedBox(height: 12),
-                    ListenableBuilder(
-                      listenable: _repository,
-                      builder: (context, _) {
-                        final startMonth = _repository.appStartMonth;
-                        String label;
-                        if (startMonth == null) {
-                          label = 'Not set (no limit)';
-                        } else {
-                          final parts = startMonth.split('-');
-                          if (parts.length >= 2) {
-                            final y = int.tryParse(parts[0]) ?? 0;
-                            final m = int.tryParse(parts[1]) ?? 0;
-                            label = DateFormat.yMMMM()
-                                .format(DateTime(y, m));
-                          } else {
-                            label = startMonth;
-                          }
-                        }
-                        return Row(
-                          children: <Widget>[
-                            Expanded(
-                              child: Text(
-                                label,
-                                style: theme.textTheme.bodyMedium?.copyWith(
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                            ),
-                            TextButton(
-                              onPressed: _pickStartMonth,
-                              child: Text(
-                                startMonth == null ? 'Set' : 'Change',
-                              ),
-                            ),
-                            if (startMonth != null)
-                              TextButton(
-                                onPressed: () async {
-                                  await _repository.setAppStartMonth('');
-                                },
-                                child: Text(
-                                  'Clear',
-                                  style: TextStyle(
-                                      color: theme.colorScheme.error),
-                                ),
-                              ),
-                          ],
-                        );
-                      },
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 16),
-            // ── Financial Month Start Day ──
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(20),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: <Widget>[
-                    Text(
-                      'Financial Month Start Day',
-                      style: theme.textTheme.titleLarge,
-                    ),
-                    const SizedBox(height: 8),
-                    const Text(
-                      'Set the day your financial month begins (e.g. your pay day). '
-                      'All budget periods and summaries will use this as the month boundary.',
-                    ),
-                    const SizedBox(height: 12),
-                    ListenableBuilder(
-                      listenable: _repository,
-                      builder: (context, _) {
-                        final startDay = _repository.financialMonthStartDay;
-                        final (year, month) = FinancialMonth.parseKey(
-                            _repository.activeBudgetMonth);
-                        final periodLabel = FinancialMonth.periodLabel(
-                            year, month, startDay);
-                        return Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: <Widget>[
-                                Expanded(
-                                  child: Text(
-                                    startDay == 1
-                                        ? '1st (calendar month)'
-                                        : '${_ordinal(startDay)} of each month',
-                                    style: theme.textTheme.bodyMedium?.copyWith(
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                                  ),
-                                ),
-                                TextButton(
-                                  onPressed: () => _pickFinancialMonthStartDay(startDay),
-                                  child: Text(
-                                    startDay == 1 ? 'Set' : 'Change',
-                                  ),
-                                ),
-                                if (startDay > 1)
-                                  TextButton(
-                                    onPressed: () async {
-                                      await _repository.setFinancialMonthStartDay(1);
-                                    },
-                                    child: Text(
-                                      'Reset',
-                                      style: TextStyle(
-                                          color: theme.colorScheme.error),
-                                    ),
-                                  ),
-                              ],
-                            ),
-                            if (startDay > 1) ...[
-                              const SizedBox(height: 4),
-                              Text(
-                                'Current period: $periodLabel',
-                                style: theme.textTheme.bodySmall?.copyWith(
-                                  color: theme.colorScheme.onSurfaceVariant,
-                                ),
-                              ),
-                            ],
-                          ],
-                        );
-                      },
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 16),
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(20),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: <Widget>[
-                    Text(
-                      'Data & Privacy',
-                      style: theme.textTheme.titleLarge,
-                    ),
-                    const SizedBox(height: 12),
-                    const Text(
-                      'All your financial data is stored locally on this device. '
-                      'When AI Insights is used, a summary of your financial '
-                      'data is sent to Google Gemini via Firebase to generate advice. '
-                      'No data is shared otherwise.',
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 16),
-            Card(
-              color: theme.colorScheme.errorContainer.withValues(alpha: 0.3),
-              child: InkWell(
-                borderRadius: BorderRadius.circular(12),
-                onTap: () => _confirmResetApp(context),
-                child: Padding(
-                  padding: const EdgeInsets.all(20),
-                  child: Row(
-                    children: [
-                      Container(
-                        width: 40,
-                        height: 40,
-                        decoration: BoxDecoration(
-                          color: theme.colorScheme.error,
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: Icon(
-                          Icons.restart_alt_rounded,
-                          size: 20,
-                          color: theme.colorScheme.onError,
-                        ),
-                      ),
-                      const SizedBox(width: 14),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Reset App',
-                              style: theme.textTheme.titleSmall?.copyWith(
-                                fontWeight: FontWeight.w600,
-                                color: theme.colorScheme.error,
-                              ),
-                            ),
-                            const SizedBox(height: 2),
-                            Text(
-                              'Erase all data and return to factory state',
-                              style: theme.textTheme.bodySmall?.copyWith(
-                                color: theme.colorScheme.onSurfaceVariant,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      Icon(
-                        Icons.arrow_forward_ios_rounded,
-                        size: 14,
-                        color: theme.colorScheme.onSurfaceVariant,
-                      ),
-                    ],
-                  ),
                 ),
               ),
             ),
@@ -671,104 +411,254 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  Future<void> _showBugReport(BuildContext context) async {
+  Future<void> _showFeedbackDialog(BuildContext context) async {
+    const _typeBug = 'bug';
+    const _typeFeature = 'feature';
+    String selectedType = _typeBug;
+
     final titleController = TextEditingController();
-    final descController = TextEditingController();
+    final stepsController = TextEditingController();
+    final expectedController = TextEditingController();
+    final actualController = TextEditingController();
+    final featureDescController = TextEditingController();
+    final useCaseController = TextEditingController();
+    String severity = 'Medium';
+    String priority = 'Important';
     final theme = Theme.of(context);
 
-    final result = await showDialog<Map<String, String>>(
+    final submitted = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: Row(
-          children: [
-            Icon(Icons.bug_report_outlined,
-                size: 22, color: theme.colorScheme.error),
-            const SizedBox(width: 8),
-            const Text('Submit a Bug'),
-          ],
-        ),
-        content: SizedBox(
-          width: 400,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: titleController,
-                autofocus: true,
-                decoration: const InputDecoration(
-                  labelText: 'Summary',
-                  hintText: 'e.g. Budget totals wrong after copy',
-                  border: OutlineInputBorder(),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) {
+          final isBug = selectedType == _typeBug;
+          return AlertDialog(
+            title: Row(
+              children: [
+                Icon(
+                  isBug ? Icons.bug_report_outlined : Icons.lightbulb_outline_rounded,
+                  size: 22,
+                  color: isBug ? theme.colorScheme.error : theme.colorScheme.primary,
+                ),
+                const SizedBox(width: 8),
+                const Text('Submit Feedback'),
+              ],
+            ),
+            content: SizedBox(
+              width: 480,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // ── Type toggle ──
+                    SegmentedButton<String>(
+                      segments: const [
+                        ButtonSegment(
+                          value: _typeBug,
+                          label: Text('Bug Report'),
+                          icon: Icon(Icons.bug_report_outlined, size: 18),
+                        ),
+                        ButtonSegment(
+                          value: _typeFeature,
+                          label: Text('Feature Request'),
+                          icon: Icon(Icons.lightbulb_outline_rounded, size: 18),
+                        ),
+                      ],
+                      selected: {selectedType},
+                      onSelectionChanged: (v) =>
+                          setDialogState(() => selectedType = v.first),
+                    ),
+                    const SizedBox(height: 20),
+                    // ── Title / Summary ──
+                    TextField(
+                      controller: titleController,
+                      autofocus: true,
+                      decoration: InputDecoration(
+                        labelText: isBug ? 'Summary' : 'Feature Title',
+                        hintText: isBug
+                            ? 'e.g. Budget totals wrong after copying month'
+                            : 'e.g. Export budgets to CSV',
+                        border: const OutlineInputBorder(),
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    if (isBug) ...[
+                      // ── Steps to reproduce ──
+                      TextField(
+                        controller: stepsController,
+                        maxLines: 3,
+                        decoration: const InputDecoration(
+                          labelText: 'Steps to Reproduce',
+                          hintText:
+                              '1. Go to Budget\n2. Copy month\n3. Totals show incorrectly',
+                          border: OutlineInputBorder(),
+                          alignLabelWithHint: true,
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                      // ── Expected ──
+                      TextField(
+                        controller: expectedController,
+                        maxLines: 2,
+                        decoration: const InputDecoration(
+                          labelText: 'Expected Behaviour',
+                          hintText: 'What should have happened?',
+                          border: OutlineInputBorder(),
+                          alignLabelWithHint: true,
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                      // ── Actual ──
+                      TextField(
+                        controller: actualController,
+                        maxLines: 2,
+                        decoration: const InputDecoration(
+                          labelText: 'Actual Behaviour',
+                          hintText: 'What actually happened?',
+                          border: OutlineInputBorder(),
+                          alignLabelWithHint: true,
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                      // ── Severity ──
+                      DropdownButtonFormField<String>(
+                        value: severity,
+                        decoration: const InputDecoration(
+                          labelText: 'Severity',
+                          border: OutlineInputBorder(),
+                        ),
+                        items: const [
+                          DropdownMenuItem(value: 'Low', child: Text('Low — minor cosmetic issue')),
+                          DropdownMenuItem(value: 'Medium', child: Text('Medium — noticeable but workaround exists')),
+                          DropdownMenuItem(value: 'High', child: Text('High — major functionality broken')),
+                          DropdownMenuItem(value: 'Critical', child: Text('Critical — app crashes / data loss')),
+                        ],
+                        onChanged: (v) => setDialogState(() => severity = v!),
+                      ),
+                    ] else ...[
+                      // ── Feature description ──
+                      TextField(
+                        controller: featureDescController,
+                        maxLines: 3,
+                        decoration: const InputDecoration(
+                          labelText: 'Description',
+                          hintText: 'Describe what this feature would do.',
+                          border: OutlineInputBorder(),
+                          alignLabelWithHint: true,
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                      // ── Use case ──
+                      TextField(
+                        controller: useCaseController,
+                        maxLines: 2,
+                        decoration: const InputDecoration(
+                          labelText: 'Why does this matter?',
+                          hintText:
+                              'How would this help you or other users?',
+                          border: OutlineInputBorder(),
+                          alignLabelWithHint: true,
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                      // ── Priority ──
+                      DropdownButtonFormField<String>(
+                        value: priority,
+                        decoration: const InputDecoration(
+                          labelText: 'Priority',
+                          border: OutlineInputBorder(),
+                        ),
+                        items: const [
+                          DropdownMenuItem(value: 'Nice to have', child: Text('Nice to have')),
+                          DropdownMenuItem(value: 'Important', child: Text('Important')),
+                          DropdownMenuItem(value: 'Critical', child: Text('Critical to my workflow')),
+                        ],
+                        onChanged: (v) => setDialogState(() => priority = v!),
+                      ),
+                    ],
+                  ],
                 ),
               ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: descController,
-                maxLines: 5,
-                decoration: const InputDecoration(
-                  labelText: 'What happened?',
-                  hintText:
-                      'Describe the steps to reproduce, what you expected, '
-                      'and what actually happened.',
-                  border: OutlineInputBorder(),
-                  alignLabelWithHint: true,
-                ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Cancel'),
+              ),
+              FilledButton.icon(
+                onPressed: () {
+                  if (titleController.text.trim().isEmpty) return;
+                  Navigator.pop(ctx, true);
+                },
+                icon: const Icon(Icons.send, size: 18),
+                label: const Text('Submit'),
               ),
             ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel'),
-          ),
-          FilledButton.icon(
-            onPressed: () {
-              final title = titleController.text.trim();
-              if (title.isEmpty) return;
-              Navigator.pop(ctx, {
-                'title': title,
-                'description': descController.text.trim(),
-              });
-            },
-            icon: const Icon(Icons.send, size: 18),
-            label: const Text('Submit'),
-          ),
-        ],
+          );
+        },
       ),
     );
 
-    if (result == null || !mounted) return;
+    if (submitted != true || !mounted) return;
 
+    final isBug = selectedType == _typeBug;
     try {
+      final body = isBug
+          ? {
+              '_subject': '[Bug — $severity] ${titleController.text.trim()}',
+              'type': 'Bug Report',
+              'summary': titleController.text.trim(),
+              'steps_to_reproduce': stepsController.text.trim().isEmpty
+                  ? '(not provided)'
+                  : stepsController.text.trim(),
+              'expected_behaviour': expectedController.text.trim().isEmpty
+                  ? '(not provided)'
+                  : expectedController.text.trim(),
+              'actual_behaviour': actualController.text.trim().isEmpty
+                  ? '(not provided)'
+                  : actualController.text.trim(),
+              'severity': severity,
+              'app_version': 'Debt Free v1.0.0',
+              'platform': 'Windows',
+              'date': DateFormat.yMMMd().format(DateTime.now()),
+            }
+          : {
+              '_subject': '[Feature — $priority] ${titleController.text.trim()}',
+              'type': 'Feature Request',
+              'title': titleController.text.trim(),
+              'description': featureDescController.text.trim().isEmpty
+                  ? '(not provided)'
+                  : featureDescController.text.trim(),
+              'why_it_matters': useCaseController.text.trim().isEmpty
+                  ? '(not provided)'
+                  : useCaseController.text.trim(),
+              'priority': priority,
+              'app_version': 'Debt Free v1.0.0',
+              'platform': 'Windows',
+              'date': DateFormat.yMMMd().format(DateTime.now()),
+            };
+
       final response = await http.post(
         Uri.parse('https://formspree.io/f/xnjlvrjq'),
         headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
-          '_subject': 'Bug Report: ${result['title']}',
-          'summary': result['title'],
-          'description': result['description']!.isEmpty
-              ? '(none)'
-              : result['description'],
-          'app_version': 'Debt Free v1.0.0',
-          'platform': 'Windows',
-          'date': DateFormat.yMMMd().format(DateTime.now()),
-        }),
+        body: jsonEncode(body),
       );
 
       if (!mounted) return;
 
-      if (response.statusCode == 200 || response.statusCode == 201 || response.statusCode == 202) {
+      if (response.statusCode >= 200 && response.statusCode < 300) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Bug report submitted — thank you!'),
+          SnackBar(
+            content: Text(
+                isBug ? 'Bug report submitted — thank you!' : 'Feature request submitted — thank you!'),
             behavior: SnackBarBehavior.floating,
           ),
         );
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Failed to submit (${response.statusCode}). Please try again.'),
+            content: Text(
+                'Failed to submit (${response.statusCode}). Please try again.'),
             behavior: SnackBarBehavior.floating,
           ),
         );
@@ -777,7 +667,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Could not connect. Check your internet and try again.'),
+            content: Text(
+                'Could not connect. Check your internet and try again.'),
             behavior: SnackBarBehavior.floating,
           ),
         );
@@ -785,46 +676,101 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
-  Future<void> _confirmResetApp(BuildContext context) async {
+  String _formatCompact(int value) {
+    if (value >= 1000000) {
+      return '${(value / 1000000).toStringAsFixed(1)}M';
+    }
+    if (value >= 1000) {
+      return '${(value / 1000).toStringAsFixed(1)}K';
+    }
+    return '$value';
+  }
+}
+
+class _AiUsageMetric extends StatelessWidget {
+  const _AiUsageMetric({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        icon: Icon(Icons.warning_amber_rounded,
-            size: 40, color: theme.colorScheme.error),
-        title: const Text('Reset App?'),
-        content: const Text(
-          'This will permanently delete all your data — budgets, debts, '
-          'mortgage, tracking history, planner events, and settings.\n\n'
-          'This action cannot be undone.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            style: FilledButton.styleFrom(
-              backgroundColor: theme.colorScheme.error,
+    return Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.45),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            style: theme.textTheme.labelSmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
             ),
-            child: const Text('Reset Everything'),
           ),
+          const SizedBox(height: 4),
+          Text(value, style: theme.textTheme.titleSmall),
         ],
       ),
     );
+  }
+}
 
-    if (confirmed != true || !mounted) return;
+class _AiUsageChip extends StatelessWidget {
+  const _AiUsageChip({required this.label, required this.value});
 
-    await _repository.resetAll();
+  final String label;
+  final int value;
 
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('App has been reset to factory state.'),
-          behavior: SnackBarBehavior.floating,
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.primary.withValues(alpha: 0.14),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        '$label: $value',
+        style: theme.textTheme.labelSmall?.copyWith(
+          color: theme.colorScheme.primary,
+          fontWeight: FontWeight.w700,
         ),
-      );
-    }
+      ),
+    );
+  }
+}
+
+String _developerAccessScenarioLabel(DeveloperAccessScenario scenario) {
+  switch (scenario) {
+    case DeveloperAccessScenario.live:
+      return 'Live app behaviour';
+    case DeveloperAccessScenario.activeTrial:
+      return 'Force active trial';
+    case DeveloperAccessScenario.trialEndingToday:
+      return 'Force last trial day';
+    case DeveloperAccessScenario.trialExpired:
+      return 'Force trial expired';
+    case DeveloperAccessScenario.premium:
+      return 'Force premium active';
+  }
+}
+
+String _developerAccessScenarioDescription(DeveloperAccessScenario scenario) {
+  switch (scenario) {
+    case DeveloperAccessScenario.live:
+      return 'Use the real entitlement state, plus any developer month offset already applied.';
+    case DeveloperAccessScenario.activeTrial:
+      return 'Pretend the user is mid-trial and still fully entitled.';
+    case DeveloperAccessScenario.trialEndingToday:
+      return 'Pretend the user is on the final day of their 3-day trial.';
+    case DeveloperAccessScenario.trialExpired:
+      return 'Pretend the trial has ended so paywall, limits, and expiry messaging can be tested.';
+    case DeveloperAccessScenario.premium:
+      return 'Pretend the user has an active Premium subscription.';
   }
 }

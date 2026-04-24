@@ -18,7 +18,9 @@ class DebtFreeApp extends StatelessWidget {
         return MaterialApp.router(
           title: 'Debt Free',
           debugShowCheckedModeBanner: false,
-          theme: AppTheme.light(),
+          theme: AppTheme.dark(),
+          darkTheme: AppTheme.dark(),
+          themeMode: ThemeMode.dark,
           routerConfig: buildAppRouter(),
           builder: (context, child) {
             if (showPaywall) {

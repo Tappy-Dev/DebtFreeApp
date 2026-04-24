@@ -8,6 +8,7 @@ import 'package:debt_free_app/features/tracking/models/budget_actual.dart';
 import 'package:debt_free_app/features/tracking/models/budget_actual_entry.dart';
 import 'package:debt_free_app/features/tracking/models/budget_period.dart';
 import 'package:debt_free_app/features/tracking/models/monthly_budget_summary.dart';
+import 'package:debt_free_app/features/tracking/models/tracking_workflow_status.dart';
 import 'package:debt_free_app/shared/widgets/app_shell_scaffold.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -26,6 +27,9 @@ class _MonthlyTrackingScreenState extends State<MonthlyTrackingScreen> {
   bool _loading = true;
   bool _extraIncomeExpanded = false;
   final _expandedTrackableIds = <String>{};
+  // Tracks the effective "current month" at last sync – used to detect when
+  // developer-mode offset changes so the screen auto-navigates to the new month.
+  late String _effectiveCurrentMonthKey;
 
   final _currency = NumberFormat.currency(
     locale: 'en_GB',
@@ -41,6 +45,7 @@ class _MonthlyTrackingScreenState extends State<MonthlyTrackingScreen> {
     final (y, m) = FinancialMonth.parseKey(monthKey);
     _year = y;
     _month = m;
+    _effectiveCurrentMonthKey = monthKey;
     // If a start month is set and current month is before it, jump to start
     final startMonth = repo.appStartMonth;
     if (startMonth != null && startMonth.isNotEmpty) {
@@ -53,6 +58,34 @@ class _MonthlyTrackingScreenState extends State<MonthlyTrackingScreen> {
       }
     }
     _loadMonth();
+    repo.addListener(_onRepositoryChange);
+  }
+
+  @override
+  void dispose() {
+    SessionFinancialRepository.instance.removeListener(_onRepositoryChange);
+    super.dispose();
+  }
+
+  void _onRepositoryChange() {
+    final repo = SessionFinancialRepository.instance;
+    final newMonthKey = repo.currentMonthKeyWithStartDay();
+    if (newMonthKey == _effectiveCurrentMonthKey) return;
+    // Effective current month changed (developer mode offset changed).
+    // Only auto-jump if the user is still viewing the old effective current month
+    // (i.e. they haven't manually browsed to a different period).
+    final oldKey = _effectiveCurrentMonthKey;
+    _effectiveCurrentMonthKey = newMonthKey;
+    final currentViewKey =
+        '${_year}-${_month.toString().padLeft(2, '0')}';
+    if (currentViewKey == oldKey) {
+      final (y, m) = FinancialMonth.parseKey(newMonthKey);
+      setState(() {
+        _year = y;
+        _month = m;
+      });
+      _loadMonth();
+    }
   }
 
   Future<void> _loadMonth() async {
@@ -555,10 +588,23 @@ class _MonthlyTrackingScreenState extends State<MonthlyTrackingScreen> {
 
   Widget _buildContent(MonthlyBudgetSummary summary) {
     final theme = Theme.of(context);
+    final repo = SessionFinancialRepository.instance;
+    final currentKey = repo.currentMonthKeyWithStartDay();
+    final viewKey = BudgetPeriod.buildId(summary.period.year, summary.period.month);
+    final workflowStatus = buildTrackingWorkflowStatus(
+      summary: summary,
+      now: repo.effectiveNow,
+      financialMonthStartDay: repo.financialMonthStartDay,
+      isCurrentPeriod: viewKey == currentKey,
+    );
 
     return ListView(
       padding: const EdgeInsets.all(20),
       children: [
+        if (workflowStatus.isActionable) ...[
+          _buildWorkflowBanner(workflowStatus),
+          const SizedBox(height: 12),
+        ],
         // ── Extra Income ──
         _buildCollapsibleCard(
           icon: Icons.arrow_downward_rounded,
@@ -717,6 +763,94 @@ class _MonthlyTrackingScreenState extends State<MonthlyTrackingScreen> {
           ),
         const SizedBox(height: 16),
       ],
+    );
+  }
+
+  Widget _buildWorkflowBanner(TrackingWorkflowStatus status) {
+    final theme = Theme.of(context);
+    final accentColor = switch (status.stage) {
+      TrackingWorkflowStage.gettingStarted => theme.colorScheme.primary,
+      TrackingWorkflowStage.inProgress => theme.colorScheme.tertiary,
+      TrackingWorkflowStage.readyToClose => Colors.orange.shade700,
+      TrackingWorkflowStage.overdue => theme.colorScheme.error,
+      TrackingWorkflowStage.closed => Colors.green.shade700,
+    };
+    final icon = switch (status.stage) {
+      TrackingWorkflowStage.gettingStarted => Icons.play_circle_outline_rounded,
+      TrackingWorkflowStage.inProgress => Icons.timeline_rounded,
+      TrackingWorkflowStage.readyToClose => Icons.task_alt_rounded,
+      TrackingWorkflowStage.overdue => Icons.warning_amber_rounded,
+      TrackingWorkflowStage.closed => Icons.lock_outline_rounded,
+    };
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: accentColor.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: accentColor.withValues(alpha: 0.25)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, size: 20, color: accentColor),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  status.title,
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            status.message,
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              _buildWorkflowChip(
+                'Trackable',
+                '${status.trackableStartedCount}/${status.trackableTotalCount}',
+              ),
+              _buildWorkflowChip('Extra', '${status.extraExpenseCount}'),
+            ],
+          ),
+          if (status.canCloseMonth) ...[
+            const SizedBox(height: 12),
+            FilledButton.tonalIcon(
+              onPressed: _closeMonth,
+              icon: const Icon(Icons.lock_outline, size: 18),
+              label: const Text('Close Month'),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildWorkflowChip(String label, String value) {
+    final theme = Theme.of(context);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        '$label: $value',
+        style: theme.textTheme.labelMedium,
+      ),
     );
   }
 

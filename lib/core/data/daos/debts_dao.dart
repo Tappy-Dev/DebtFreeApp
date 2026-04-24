@@ -9,31 +9,35 @@ class DebtsDao {
   final DriftFinancialDatabase _database;
 
   Future<List<DebtAccount>> loadAll() async {
-    final rows = await _database.customSelect(
-      'SELECT ${DebtRecord.selectColumns} '
-      'FROM ${DriftSchema.debtsTable} ORDER BY name',
-    ).get();
+    final rows = await _database
+        .customSelect(
+          'SELECT ${DebtRecord.selectColumns} '
+          'FROM ${DriftSchema.debtsTable} ORDER BY name',
+        )
+        .get();
 
     final debts = rows
         .map((row) => DebtRecord.fromRow(row).toDebtAccount())
         .toList(growable: false);
 
     // Load extra payments for all debts
-    final extraRows = await _database.customSelect(
-      'SELECT id, debt_id, amount, start_date, end_date '
-      'FROM ${DriftSchema.debtExtraPaymentsTable}',
-    ).get();
+    final extraRows = await _database
+        .customSelect(
+          'SELECT id, debt_id, amount, start_date, end_date '
+          'FROM ${DriftSchema.debtExtraPaymentsTable}',
+        )
+        .get();
 
     final extraByDebt = <String, List<DebtExtraPayment>>{};
     for (final row in extraRows) {
       final debtId = row.read<String>('debt_id');
       extraByDebt.putIfAbsent(debtId, () => []).add(DebtExtraPayment(
-        id: row.read<String>('id'),
-        debtId: debtId,
-        amount: row.read<double>('amount'),
-        startDate: DateTime.parse(row.read<String>('start_date')),
-        endDate: DateTime.parse(row.read<String>('end_date')),
-      ));
+            id: row.read<String>('id'),
+            debtId: debtId,
+            amount: row.read<double>('amount'),
+            startDate: DateTime.parse(row.read<String>('start_date')),
+            endDate: DateTime.parse(row.read<String>('end_date')),
+          ));
     }
 
     return debts.map((d) {
@@ -49,6 +53,7 @@ class DebtsDao {
         payoffDate: d.payoffDate,
         startDate: d.startDate,
         loanEndDate: d.loanEndDate,
+        paymentDay: d.paymentDay,
         minPaymentRule: d.minPaymentRule,
         originalBalance: d.originalBalance,
         extraPayments: extras,
@@ -63,7 +68,7 @@ class DebtsDao {
       '''
       INSERT INTO ${DriftSchema.debtsTable}
         ${DebtRecord.insertColumns}
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(id) DO UPDATE SET
         name = excluded.name,
         debt_type = excluded.debt_type,
@@ -76,6 +81,7 @@ class DebtsDao {
         min_payment_floor = excluded.min_payment_floor,
         start_date = excluded.start_date,
         loan_end_date = excluded.loan_end_date,
+        payment_day = excluded.payment_day,
         original_balance = excluded.original_balance
       ''',
       record.toSqlVariables(),

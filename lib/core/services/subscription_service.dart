@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:debt_free_app/core/data/session_financial_repository.dart';
 import 'package:debt_free_app/core/data/drift_financial_database.dart';
 import 'package:debt_free_app/core/data/drift_schema.dart';
 import 'package:drift/drift.dart';
@@ -21,34 +22,115 @@ class SubscriptionService extends ChangeNotifier {
 
   final InAppPurchase _iap = InAppPurchase.instance;
   StreamSubscription<List<PurchaseDetails>>? _purchaseSubscription;
+  DriftFinancialDatabase? _database;
 
   bool _isAvailable = false;
   bool _subscribed = false;
-  bool _trialActive = false;
-  bool _trialExpired = false;
   DateTime? _trialStartDate;
   ProductDetails? _monthlyProduct;
   ProductDetails? _annualProduct;
   bool _initialized = false;
+  DeveloperAccessScenario _developerAccessScenario =
+      DeveloperAccessScenario.live;
+  bool _lastDeveloperModeEnabled = false;
+  int _lastDeveloperMonthOffset = 0;
 
-  bool get isEntitled => _subscribed || _trialActive;
-  bool get isSubscribed => _subscribed;
-  bool get isTrialActive => _trialActive;
-  bool get isTrialExpired => _trialExpired;
+  bool get isEntitled => isSubscribed || isTrialActive;
+  bool get isSubscribed {
+    switch (_activeDeveloperScenario) {
+      case DeveloperAccessScenario.live:
+        return _subscribed;
+      case DeveloperAccessScenario.premium:
+        return true;
+      case DeveloperAccessScenario.activeTrial:
+      case DeveloperAccessScenario.trialEndingToday:
+      case DeveloperAccessScenario.trialExpired:
+        return false;
+    }
+  }
+
+  bool get isTrialActive {
+    switch (_activeDeveloperScenario) {
+      case DeveloperAccessScenario.live:
+        final startDate = _trialStartDate;
+        if (startDate == null || _subscribed) return false;
+        return _referenceNow.difference(startDate).inDays < trialDays;
+      case DeveloperAccessScenario.activeTrial:
+      case DeveloperAccessScenario.trialEndingToday:
+        return true;
+      case DeveloperAccessScenario.trialExpired:
+      case DeveloperAccessScenario.premium:
+        return false;
+    }
+  }
+
+  bool get isTrialExpired {
+    switch (_activeDeveloperScenario) {
+      case DeveloperAccessScenario.live:
+        final startDate = _trialStartDate;
+        if (startDate == null || _subscribed) return false;
+        return _referenceNow.difference(startDate).inDays >= trialDays;
+      case DeveloperAccessScenario.trialExpired:
+        return true;
+      case DeveloperAccessScenario.activeTrial:
+      case DeveloperAccessScenario.trialEndingToday:
+      case DeveloperAccessScenario.premium:
+        return false;
+    }
+  }
+
   bool get isStoreAvailable => _isAvailable;
-  DateTime? get trialStartDate => _trialStartDate;
+  DateTime? get trialStartDate {
+    switch (_activeDeveloperScenario) {
+      case DeveloperAccessScenario.live:
+        return _trialStartDate;
+      case DeveloperAccessScenario.activeTrial:
+        return _referenceNow.subtract(const Duration(days: 1));
+      case DeveloperAccessScenario.trialEndingToday:
+        return _referenceNow.subtract(Duration(days: trialDays - 1));
+      case DeveloperAccessScenario.trialExpired:
+        return _referenceNow.subtract(Duration(days: trialDays));
+      case DeveloperAccessScenario.premium:
+        return _trialStartDate;
+    }
+  }
+
   ProductDetails? get monthlyProduct => _monthlyProduct;
   ProductDetails? get annualProduct => _annualProduct;
   bool get initialized => _initialized;
+  DeveloperAccessScenario get developerAccessScenario => _developerAccessScenario;
 
   int get trialDaysRemaining {
-    if (_trialStartDate == null) return trialDays;
-    final elapsed = DateTime.now().difference(_trialStartDate!).inDays;
+    if (isSubscribed) return 0;
+    final startDate = trialStartDate;
+    if (startDate == null) return trialDays;
+    final elapsed = _referenceNow.difference(startDate).inDays;
     return (trialDays - elapsed).clamp(0, trialDays);
+  }
+
+  DateTime get _referenceNow => SessionFinancialRepository.instance.effectiveNow;
+
+  DeveloperAccessScenario get _activeDeveloperScenario {
+    if (!SessionFinancialRepository.instance.developerModeEnabled) {
+      return DeveloperAccessScenario.live;
+    }
+    return _developerAccessScenario;
   }
 
   Future<void> initialize(DriftFinancialDatabase database) async {
     if (_initialized) return;
+    _database = database;
+
+    final repo = SessionFinancialRepository.instance;
+    _lastDeveloperModeEnabled = repo.developerModeEnabled;
+    _lastDeveloperMonthOffset = repo.developerMonthOffset;
+    repo.addListener(_handleDeveloperContextChanged);
+
+    final storedScenario =
+        await database.appSettingsDao.getDeveloperAccessScenario();
+    _developerAccessScenario = DeveloperAccessScenarioX.fromStorageValue(
+      storedScenario,
+    );
 
     // Load trial start date from DB
     final rows = await database.customSelect(
@@ -63,7 +145,7 @@ class SubscriptionService extends ChangeNotifier {
 
     // Start trial on first launch
     if (_trialStartDate == null) {
-      _trialStartDate = DateTime.now();
+      _trialStartDate = _referenceNow;
       await database.customStatement(
         '''
         INSERT INTO ${DriftSchema.appSettingsTable} (key, value)
@@ -73,8 +155,6 @@ class SubscriptionService extends ChangeNotifier {
         [_keyTrialStart, _trialStartDate!.toIso8601String()],
       );
     }
-
-    _updateTrialStatus();
 
     // Initialize store (only on Android/iOS)
     if (Platform.isAndroid || Platform.isIOS) {
@@ -110,15 +190,23 @@ class SubscriptionService extends ChangeNotifier {
     notifyListeners();
   }
 
-  void _updateTrialStatus() {
-    if (_trialStartDate == null) {
-      _trialActive = false;
-      _trialExpired = false;
-      return;
-    }
-    final elapsed = DateTime.now().difference(_trialStartDate!).inDays;
-    _trialActive = elapsed < trialDays;
-    _trialExpired = elapsed >= trialDays && !_subscribed;
+  Future<void> setDeveloperAccessScenario(
+    DeveloperAccessScenario scenario,
+  ) async {
+    _developerAccessScenario = scenario;
+    await _database?.appSettingsDao
+        .setDeveloperAccessScenario(scenario.storageValue);
+    notifyListeners();
+  }
+
+  void _handleDeveloperContextChanged() {
+    final repo = SessionFinancialRepository.instance;
+    final changed = _lastDeveloperModeEnabled != repo.developerModeEnabled ||
+        _lastDeveloperMonthOffset != repo.developerMonthOffset;
+    if (!changed) return;
+    _lastDeveloperModeEnabled = repo.developerModeEnabled;
+    _lastDeveloperMonthOffset = repo.developerMonthOffset;
+    notifyListeners();
   }
 
   static const _productIds = {monthlyProductId, annualProductId};
@@ -130,7 +218,6 @@ class SubscriptionService extends ChangeNotifier {
           case PurchaseStatus.purchased:
           case PurchaseStatus.restored:
             _subscribed = true;
-            _updateTrialStatus();
             notifyListeners();
             if (purchase.pendingCompletePurchase) {
               _iap.completePurchase(purchase);
@@ -163,6 +250,28 @@ class SubscriptionService extends ChangeNotifier {
 
   void dispose() {
     _purchaseSubscription?.cancel();
+    SessionFinancialRepository.instance.removeListener(_handleDeveloperContextChanged);
     super.dispose();
+  }
+}
+
+enum DeveloperAccessScenario {
+  live('live'),
+  activeTrial('active-trial'),
+  trialEndingToday('trial-ending-today'),
+  trialExpired('trial-expired'),
+  premium('premium');
+
+  const DeveloperAccessScenario(this.storageValue);
+
+  final String storageValue;
+}
+
+extension DeveloperAccessScenarioX on DeveloperAccessScenario {
+  static DeveloperAccessScenario fromStorageValue(String? value) {
+    for (final scenario in DeveloperAccessScenario.values) {
+      if (scenario.storageValue == value) return scenario;
+    }
+    return DeveloperAccessScenario.live;
   }
 }

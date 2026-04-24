@@ -11,6 +11,7 @@ class FinancialSummary {
     required this.debts,
     required this.incomeSources,
     required this.mortgage,
+    this.mortgages = const <Mortgage>[],
     required this.budgetSnapshot,
     this.scenarioOverview,
     this.recentTracking = const <MonthlyBudgetSummary>[],
@@ -20,6 +21,7 @@ class FinancialSummary {
   final List<DebtAccount> debts;
   final List<IncomeSource> incomeSources;
   final Mortgage? mortgage;
+  final List<Mortgage> mortgages;
   final BudgetSnapshot budgetSnapshot;
   final ScenarioOverview? scenarioOverview;
   final List<MonthlyBudgetSummary> recentTracking;
@@ -128,28 +130,30 @@ class FinancialSummary {
       );
     }
 
+    final effectiveMortgages = mortgages.isNotEmpty
+        ? mortgages
+        : (mortgage == null ? const <Mortgage>[] : <Mortgage>[mortgage!]);
+
     buffer.writeln();
-    buffer.writeln('=== MORTGAGE ===');
-    if (mortgage == null) {
-      buffer.writeln('No mortgage recorded.');
+    buffer.writeln('=== MORTGAGES ===');
+    if (effectiveMortgages.isEmpty) {
+      buffer.writeln('No mortgages recorded.');
     } else {
-      buffer.writeln(
-        'Balance: £${mortgage!.balance.toStringAsFixed(2)}',
-      );
-      buffer.writeln(
-        'Annual rate: ${mortgage!.annualRate.toStringAsFixed(2)}%',
-      );
-      buffer.writeln(
-        'Monthly payment: £${mortgage!.monthlyPayment.toStringAsFixed(2)}',
-      );
-      buffer.writeln(
-        'Remaining term: ${mortgage!.remainingTermMonths} months',
-      );
-      if (mortgage!.overpayment > 0) {
-        buffer.writeln(
-          'Current overpayment: £${mortgage!.overpayment.toStringAsFixed(2)}/month',
-        );
+      for (final m in effectiveMortgages) {
+        buffer.writeln('- ${m.name}');
+        buffer.writeln('  Balance: £${m.balance.toStringAsFixed(2)}');
+        buffer.writeln('  Annual rate: ${m.annualRate.toStringAsFixed(2)}%');
+        buffer.writeln('  Monthly payment: £${m.monthlyPayment.toStringAsFixed(2)}');
+        buffer.writeln('  Remaining term: ${m.remainingTermMonths} months');
+        if (m.overpayment > 0) {
+          buffer.writeln(
+            '  Current overpayment: £${m.overpayment.toStringAsFixed(2)}/month',
+          );
+        }
       }
+      final totalMortgageBalance =
+          effectiveMortgages.fold<double>(0, (sum, m) => sum + m.balance);
+      buffer.writeln('Total mortgage balance: £${totalMortgageBalance.toStringAsFixed(2)}');
     }
 
     if (scenarioOverview != null) {
@@ -213,9 +217,14 @@ class FinancialSummary {
         );
 
         // Show per-item detail for items with actuals entered
-        final entered = month.actuals.where((a) => a.actual > 0).toList();
+        final entered = month.actuals.where((a) => a.actual > 0).toList()
+          ..sort(
+            (a, b) => (b.actual - b.budgeted)
+                .abs()
+                .compareTo((a.actual - a.budgeted).abs()),
+          );
         if (entered.isNotEmpty) {
-          for (final a in entered) {
+          for (final a in entered.take(6)) {
             final diff = a.actual - a.budgeted;
             final diffLabel = diff >= 0
                 ? '+£${diff.toStringAsFixed(2)}'
@@ -223,6 +232,11 @@ class FinancialSummary {
             buffer.writeln(
               '  ${a.categoryName}: £${a.actual.toStringAsFixed(2)} '
               '(budget £${a.budgeted.toStringAsFixed(2)}, $diffLabel)',
+            );
+          }
+          if (entered.length > 6) {
+            buffer.writeln(
+              '  ${entered.length - 6} more tracked categories omitted for brevity.',
             );
           }
         }

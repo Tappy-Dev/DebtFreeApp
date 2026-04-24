@@ -15,6 +15,7 @@ class DebtRecord {
     this.minPaymentFloor = 25.0,
     this.startDateIso,
     this.loanEndDateIso,
+    this.paymentDay = 1,
     this.originalBalance,
   });
 
@@ -32,6 +33,7 @@ class DebtRecord {
       minPaymentFloor: debt.minPaymentRule.floor,
       startDateIso: debt.startDate?.toIso8601String(),
       loanEndDateIso: debt.loanEndDate?.toIso8601String(),
+      paymentDay: debt.paymentDay,
       originalBalance: debt.originalBalance,
     );
   }
@@ -47,22 +49,22 @@ class DebtRecord {
       payoffDateIso: row.data[payoffDateColumn] == null
           ? null
           : row.read<String>(payoffDateColumn),
-      minPaymentType: row.data[minPaymentTypeColumn] as String? ??
-          'interestPlusPercentage',
+      minPaymentType:
+          row.data[minPaymentTypeColumn] as String? ?? 'interestPlusPercentage',
       minPaymentPercentage:
           (row.data[minPaymentPercentageColumn] as num?)?.toDouble() ?? 1.0,
       minPaymentFloor:
           (row.data[minPaymentFloorColumn] as num?)?.toDouble() ?? 25.0,
       startDateIso: row.data[startDateColumn] as String?,
-        loanEndDateIso: row.data[loanEndDateColumn] as String?,
-      originalBalance:
-          (row.data[originalBalanceColumn] as num?)?.toDouble(),
+      loanEndDateIso: row.data[loanEndDateColumn] as String?,
+      paymentDay: (row.data[paymentDayColumn] as num?)?.toInt() ?? 1,
+      originalBalance: (row.data[originalBalanceColumn] as num?)?.toDouble(),
     );
   }
 
   static const String idColumn = 'id';
   static const String nameColumn = 'name';
-      static const String debtTypeColumn = 'debt_type';
+  static const String debtTypeColumn = 'debt_type';
   static const String balanceColumn = 'balance';
   static const String aprColumn = 'apr';
   static const String minimumPaymentColumn = 'minimum_payment';
@@ -71,24 +73,25 @@ class DebtRecord {
   static const String minPaymentPercentageColumn = 'min_payment_percentage';
   static const String minPaymentFloorColumn = 'min_payment_floor';
   static const String startDateColumn = 'start_date';
-    static const String loanEndDateColumn = 'loan_end_date';
+  static const String loanEndDateColumn = 'loan_end_date';
+  static const String paymentDayColumn = 'payment_day';
   static const String originalBalanceColumn = 'original_balance';
 
   static const String selectColumns =
       '$idColumn, $nameColumn, $debtTypeColumn, $balanceColumn, $aprColumn, '
       '$minimumPaymentColumn, $payoffDateColumn, '
       '$minPaymentTypeColumn, $minPaymentPercentageColumn, $minPaymentFloorColumn, '
-      '$startDateColumn, $loanEndDateColumn, $originalBalanceColumn';
+      '$startDateColumn, $loanEndDateColumn, $paymentDayColumn, $originalBalanceColumn';
 
   static const String insertColumns =
       '($idColumn, $nameColumn, $debtTypeColumn, $balanceColumn, $aprColumn, '
       '$minimumPaymentColumn, $payoffDateColumn, '
       '$minPaymentTypeColumn, $minPaymentPercentageColumn, $minPaymentFloorColumn, '
-      '$startDateColumn, $loanEndDateColumn, $originalBalanceColumn)';
+      '$startDateColumn, $loanEndDateColumn, $paymentDayColumn, $originalBalanceColumn)';
 
   final String id;
   final String name;
-    final String debtType;
+  final String debtType;
   final double balance;
   final double apr;
   final double minimumPayment;
@@ -98,6 +101,7 @@ class DebtRecord {
   final double minPaymentFloor;
   final String? startDateIso;
   final String? loanEndDateIso;
+  final int paymentDay;
   final double? originalBalance;
 
   static DebtType _parseDebtType(String value) {
@@ -136,6 +140,7 @@ class DebtRecord {
       startDate: startDateIso == null ? null : DateTime.parse(startDateIso!),
       loanEndDate:
           loanEndDateIso == null ? null : DateTime.parse(loanEndDateIso!),
+      paymentDay: paymentDay,
       originalBalance: originalBalance,
       minPaymentRule: MinPaymentRule(
         type: _parseMinPaymentType(minPaymentType),
@@ -159,6 +164,7 @@ class DebtRecord {
       minPaymentFloor,
       startDateIso,
       loanEndDateIso,
+      paymentDay,
       originalBalance,
     ];
   }

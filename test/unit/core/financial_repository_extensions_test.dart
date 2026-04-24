@@ -68,6 +68,7 @@ class _RepositoryStub implements FinancialRepository {
   @override
   List<Expense> getBills() => const [];
   @override
+  List<Expense> getSubscriptions() => const [];  @override
   String get activeBudgetMonth => '';
   @override
   List<String> get availableBudgetMonths => const [];

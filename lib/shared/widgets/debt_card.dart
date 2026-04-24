@@ -24,6 +24,7 @@ class DebtCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
 
     return Card(
       child: Padding(
@@ -31,14 +32,59 @@ class DebtCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
-            Text(
-              title,
-              style: theme.textTheme.titleMedium,
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    title,
+                    style: theme.textTheme.titleMedium,
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: scheme.primary.withValues(alpha: 0.2),
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: Text(
+                    '${apr.toStringAsFixed(1)}% APR',
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: scheme.primary,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(height: 12),
-            Text('Balance: ${_currency.format(balance)}'),
-            Text('APR: ${apr.toStringAsFixed(1)}%'),
-            Text('Payment: ${_currency.format(payment)}'),
+            const SizedBox(height: 14),
+            Text(
+              _currency.format(balance),
+              style: theme.textTheme.headlineMedium?.copyWith(
+                fontSize: 28,
+                color: scheme.onSurface,
+              ),
+            ),
+            Text('Outstanding balance', style: theme.textTheme.bodySmall),
+            const SizedBox(height: 10),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: scheme.surfaceContainerHighest.withValues(alpha: 0.5),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.payments_outlined,
+                      size: 16, color: scheme.secondary),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Min payment: ${_currency.format(payment)}',
+                    style: theme.textTheme.bodyMedium,
+                  ),
+                ],
+              ),
+            ),
           ],
         ),
       ),

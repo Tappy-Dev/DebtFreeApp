@@ -16,9 +16,20 @@ abstract class FinancialRepository {
 
   List<Expense> getBills();
 
+  /// Returns only subscription-type bills (is_subscription == true).
+  List<Expense> getSubscriptions();
+
   List<ScenarioChange> getScenarioChanges();
 
   Mortgage? getMortgage();
+
+  List<Mortgage> getMortgages() {
+    final mortgage = getMortgage();
+    if (mortgage == null) {
+      return const <Mortgage>[];
+    }
+    return <Mortgage>[mortgage];
+  }
 
   // ── Month-specific budget access (for month-versioned budgets) ──
 
@@ -53,6 +64,13 @@ abstract class FinancialRepository {
   void saveMortgage(Mortgage mortgage);
 
   void deleteMortgage();
+
+  void deleteMortgageById(String mortgageId) {
+    final mortgage = getMortgage();
+    if (mortgage != null && mortgage.id == mortgageId) {
+      deleteMortgage();
+    }
+  }
 
   // ── App settings ──
 

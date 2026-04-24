@@ -313,6 +313,7 @@ class _PlannerScreenState extends State<PlannerScreen> {
       debts: _repository.getDebts(),
       incomeSources: _repository.getIncomeSources(),
       mortgage: _repository.getMortgage(),
+      mortgages: _repository.getMortgages(),
       budgetSnapshot: snapshot,
       plannerEvents: _repository.getPlannerEvents(),
     );
@@ -489,6 +490,7 @@ class _PlannerScreenState extends State<PlannerScreen> {
         debts: _repository.getDebts(),
         incomeSources: _repository.getIncomeSources(),
         mortgage: _repository.getMortgage(),
+        mortgages: _repository.getMortgages(),
         budgetSnapshot: snapshot,
         recentTracking: recentTracking,
         plannerEvents: events,
@@ -587,7 +589,7 @@ class _EventDialogState extends State<_EventDialog> {
             ),
             const SizedBox(height: 12),
             DropdownButtonFormField<PlannerEventType>(
-              value: _selectedType,
+              initialValue: _selectedType,
               decoration: const InputDecoration(
                 labelText: 'Type',
                 border: OutlineInputBorder(),
@@ -618,7 +620,7 @@ class _EventDialogState extends State<_EventDialog> {
               children: [
                 Expanded(
                   child: DropdownButtonFormField<int>(
-                    value: _selectedMonth,
+                    initialValue: _selectedMonth,
                     decoration: const InputDecoration(
                       labelText: 'Month',
                       border: OutlineInputBorder(),
@@ -638,7 +640,7 @@ class _EventDialogState extends State<_EventDialog> {
                 const SizedBox(width: 12),
                 Expanded(
                   child: DropdownButtonFormField<int>(
-                    value: _selectedYear,
+                    initialValue: _selectedYear,
                     decoration: const InputDecoration(
                       labelText: 'Year',
                       border: OutlineInputBorder(),

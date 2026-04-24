@@ -235,7 +235,9 @@ class ScenarioBuilderController {
     final totalMinimumPayments = _repository
         .getDebts()
         .fold<double>(0, (double sum, item) => sum + item.currentMinPayment());
-    final mortgagePayment = _repository.getMortgage()?.monthlyPayment ?? 0;
+    final mortgagePayment = _repository
+      .getMortgages()
+      .fold<double>(0, (double sum, m) => sum + m.totalMonthlyPayment);
 
     return totalIncome -
         totalBills -

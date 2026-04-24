@@ -9,14 +9,22 @@ class MortgageDao {
   final DriftFinancialDatabase _database;
 
   Future<Mortgage?> load() async {
-    final rows = await _database.customSelect(
-      'SELECT ${MortgageRecord.selectColumns} '
-      'FROM ${DriftSchema.mortgageTable} LIMIT 1',
-    ).get();
+    final mortgages = await loadAll();
+    if (mortgages.isEmpty) return null;
+    return mortgages.first;
+  }
 
-    if (rows.isEmpty) return null;
+  Future<List<Mortgage>> loadAll() async {
+    final rows = await _database
+        .customSelect(
+          'SELECT ${MortgageRecord.selectColumns} '
+          'FROM ${DriftSchema.mortgageTable}',
+        )
+        .get();
 
-    return MortgageRecord.fromRow(rows.first).toMortgage();
+    return rows
+        .map((row) => MortgageRecord.fromRow(row).toMortgage())
+        .toList(growable: false);
   }
 
   Future<void> upsert(Mortgage mortgage) {
@@ -26,14 +34,15 @@ class MortgageDao {
       '''
       INSERT INTO ${DriftSchema.mortgageTable}
         ${MortgageRecord.insertColumns}
-      VALUES (?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(id) DO UPDATE SET
         name = excluded.name,
         balance = excluded.balance,
         annual_rate = excluded.annual_rate,
         monthly_payment = excluded.monthly_payment,
         remaining_term_months = excluded.remaining_term_months,
-        overpayment = excluded.overpayment
+        overpayment = excluded.overpayment,
+        payment_day = excluded.payment_day
       ''',
       record.toSqlVariables(),
     );
@@ -42,6 +51,13 @@ class MortgageDao {
   Future<void> deleteAll() {
     return _database.customStatement(
       'DELETE FROM ${DriftSchema.mortgageTable}',
+    );
+  }
+
+  Future<void> deleteById(String id) {
+    return _database.customStatement(
+      'DELETE FROM ${DriftSchema.mortgageTable} WHERE id = ?',
+      <Object?>[id],
     );
   }
 }

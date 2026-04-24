@@ -51,15 +51,26 @@ class _DebtsScreenState extends State<DebtsScreen> {
     final referenceDate = _repository.effectiveNow;
     final debts = _repository.getDebts();
     final totalDebt =
-      debts.fold(0.0, (s, d) => s + d.currentProjectedBalance(referenceDate));
-    final totalInterest =
-      debts.fold(0.0, (s, d) => s + d.projectedMonthlyInterest(referenceDate));
+        debts.fold(0.0, (s, d) => s + d.currentProjectedBalance(referenceDate));
+    final totalInterest = debts.fold(
+        0.0, (s, d) => s + d.projectedMonthlyInterest(referenceDate));
     final totalMinPayments =
-      debts.fold(0.0, (s, d) => s + d.projectedMinPayment(referenceDate));
+        debts.fold(0.0, (s, d) => s + d.projectedMinPayment(referenceDate));
     final theme = Theme.of(context);
 
-    // Sort by APR descending (avalanche order)
-    final sorted = List.of(debts)..sort((a, b) => b.apr.compareTo(a.apr));
+    // Group by type, then sort each group.
+    final creditCards = debts
+        .where((d) => d.debtType == DebtType.creditCard)
+        .toList()
+      ..sort((a, b) => b.apr.compareTo(a.apr));
+    final loans = debts.where((d) => d.debtType == DebtType.loan).toList()
+      ..sort((a, b) => b
+          .currentProjectedBalance(referenceDate)
+          .compareTo(a.currentProjectedBalance(referenceDate)));
+    final others = debts.where((d) => d.debtType == DebtType.other).toList()
+      ..sort((a, b) => b
+          .currentProjectedBalance(referenceDate)
+          .compareTo(a.currentProjectedBalance(referenceDate)));
 
     return AppShellScaffold(
       title: 'Debts',
@@ -145,232 +156,27 @@ class _DebtsScreenState extends State<DebtsScreen> {
                       ],
                     ),
                     const SizedBox(height: 12),
-                    ...sorted.asMap().entries.map((entry) {
-                      final index = entry.key;
-                      final debt = entry.value;
-                        final currentBal = debt.currentProjectedBalance(referenceDate);
-                      final pct =
-                          totalDebt > 0 ? currentBal / totalDebt : 0.0;
-                        final monthlyInterest = debt.projectedMonthlyInterest(referenceDate);
-                      final aprColor = debt.apr >= 30
-                          ? theme.colorScheme.error
-                          : debt.apr >= 20
-                              ? Colors.orange
-                              : Colors.green;
-
-                      return Column(
-                        children: [
-                          InkWell(
-                            onTap: () => context.push('/debts/${debt.id}'),
-                            borderRadius: BorderRadius.circular(8),
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(vertical: 10),
-                              child: Row(
-                                children: [
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Row(
-                                          children: [
-                                            Expanded(
-                                              child: Text(
-                                                debt.name,
-                                                style: theme
-                                                    .textTheme.bodyMedium
-                                                    ?.copyWith(
-                                                        fontWeight:
-                                                            FontWeight.w600),
-                                                overflow:
-                                                    TextOverflow.ellipsis,
-                                              ),
-                                            ),
-                                            const SizedBox(width: 8),
-                                            Container(
-                                              padding:
-                                                  const EdgeInsets.symmetric(
-                                                      horizontal: 6,
-                                                      vertical: 2),
-                                              decoration: BoxDecoration(
-                                                color: aprColor
-                                                    .withValues(alpha: 0.12),
-                                                borderRadius:
-                                                    BorderRadius.circular(4),
-                                              ),
-                                              child: Text(
-                                                '${debt.apr.toStringAsFixed(1)}% APR',
-                                                style: theme
-                                                    .textTheme.labelSmall
-                                                    ?.copyWith(
-                                                  color: aprColor,
-                                                  fontWeight: FontWeight.bold,
-                                                ),
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                        const SizedBox(height: 4),
-                                        Row(
-                                          children: [
-                                            Container(
-                                              padding:
-                                                  const EdgeInsets.symmetric(
-                                                horizontal: 6,
-                                                vertical: 2,
-                                              ),
-                                              decoration: BoxDecoration(
-                                                color: theme.colorScheme
-                                                    .secondaryContainer,
-                                                borderRadius:
-                                                    BorderRadius.circular(4),
-                                              ),
-                                              child: Text(
-                                                debt.debtType.label,
-                                                style: theme
-                                                    .textTheme.labelSmall
-                                                    ?.copyWith(
-                                                  fontWeight: FontWeight.w600,
-                                                ),
-                                              ),
-                                            ),
-                                            const SizedBox(width: 6),
-                                            Column(
-                                              crossAxisAlignment:
-                                                  CrossAxisAlignment.start,
-                                              children: [
-                                                Text(
-                                                  _currency.format(currentBal),
-                                                  style: theme
-                                                      .textTheme.titleSmall,
-                                                ),
-                                                if (debt.originalBalance !=
-                                                    currentBal)
-                                                  Text(
-                                                    'Original: ${_currency.format(debt.originalBalance)}',
-                                                    style: theme
-                                                        .textTheme.labelSmall
-                                                        ?.copyWith(
-                                                      color: theme.colorScheme
-                                                          .onSurfaceVariant,
-                                                    ),
-                                                  ),
-                                                if (debt.isLoan &&
-                                                    debt.loanEndDate != null)
-                                                  Text(
-                                                    'Ends ${_monthFormat.format(debt.loanEndDate!)}',
-                                                    style: theme
-                                                        .textTheme.labelSmall
-                                                        ?.copyWith(
-                                                      color: theme.colorScheme
-                                                          .onSurfaceVariant,
-                                                    ),
-                                                  ),
-                                              ],
-                                            ),
-                                            const Spacer(),
-                                            Text(
-                                              '£${monthlyInterest.toStringAsFixed(2)}/mo interest',
-                                              style: theme.textTheme.bodySmall
-                                                  ?.copyWith(
-                                                color:
-                                                    theme.colorScheme.error,
-                                              ),
-                                            ),
-                                            const SizedBox(width: 4),
-                                            Icon(Icons.chevron_right,
-                                                size: 16,
-                                                color: theme.colorScheme
-                                                    .onSurfaceVariant),
-                                          ],
-                                        ),
-                                        const SizedBox(height: 6),
-                                        ClipRRect(
-                                          borderRadius:
-                                              BorderRadius.circular(4),
-                                          child: LinearProgressIndicator(
-                                            value: pct.clamp(0.0, 1.0),
-                                            minHeight: 5,
-                                            backgroundColor: theme.colorScheme
-                                                .surfaceContainerHighest,
-                                            valueColor:
-                                                AlwaysStoppedAnimation<Color>(
-                                              aprColor.withValues(alpha: 0.7),
-                                            ),
-                                          ),
-                                        ),
-                                        const SizedBox(height: 2),
-                                        Row(
-                                          mainAxisAlignment:
-                                              MainAxisAlignment.spaceBetween,
-                                          children: [
-                                            Text(
-                                              '${(pct * 100).toStringAsFixed(1)}% of total debt',
-                                              style: theme
-                                                  .textTheme.labelSmall
-                                                  ?.copyWith(
-                                                color: theme.colorScheme
-                                                    .onSurfaceVariant,
-                                              ),
-                                            ),
-                                            Row(
-                                              mainAxisSize: MainAxisSize.min,
-                                              children: [
-                                                InkWell(
-                                                  onTap: () =>
-                                                      _openEditDebtForm(
-                                                          debt.id),
-                                                  borderRadius:
-                                                      BorderRadius.circular(
-                                                          20),
-                                                  child: Padding(
-                                                    padding:
-                                                        const EdgeInsets.all(
-                                                            4),
-                                                    child: Icon(
-                                                        Icons.edit_outlined,
-                                                        size: 16,
-                                                        color: theme
-                                                            .colorScheme
-                                                            .onSurfaceVariant),
-                                                  ),
-                                                ),
-                                                const SizedBox(width: 4),
-                                                InkWell(
-                                                  onTap: () =>
-                                                      _confirmDeleteDebt(
-                                                          debt.id, debt.name),
-                                                  borderRadius:
-                                                      BorderRadius.circular(
-                                                          20),
-                                                  child: Padding(
-                                                    padding:
-                                                        const EdgeInsets.all(
-                                                            4),
-                                                    child: Icon(
-                                                        Icons.delete_outline,
-                                                        size: 16,
-                                                        color: theme
-                                                            .colorScheme
-                                                            .error),
-                                                  ),
-                                                ),
-                                              ],
-                                            ),
-                                          ],
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                          if (index < sorted.length - 1)
-                            const Divider(height: 1),
-                        ],
-                      );
-                    }),
+                    ..._buildDebtSection(
+                      context: context,
+                      title: 'Credit Cards',
+                      debts: creditCards,
+                      totalDebt: totalDebt,
+                      referenceDate: referenceDate,
+                    ),
+                    ..._buildDebtSection(
+                      context: context,
+                      title: 'Loans',
+                      debts: loans,
+                      totalDebt: totalDebt,
+                      referenceDate: referenceDate,
+                    ),
+                    ..._buildDebtSection(
+                      context: context,
+                      title: 'Other',
+                      debts: others,
+                      totalDebt: totalDebt,
+                      referenceDate: referenceDate,
+                    ),
                   ],
                 ),
               ),
@@ -379,6 +185,216 @@ class _DebtsScreenState extends State<DebtsScreen> {
         ],
       ),
     );
+  }
+
+  List<Widget> _buildDebtSection({
+    required BuildContext context,
+    required String title,
+    required List<DebtAccount> debts,
+    required double totalDebt,
+    required DateTime referenceDate,
+  }) {
+    if (debts.isEmpty) {
+      return const <Widget>[];
+    }
+
+    final theme = Theme.of(context);
+    final widgets = <Widget>[
+      Padding(
+        padding: const EdgeInsets.only(top: 8, bottom: 6),
+        child: Text(
+          title,
+          style: theme.textTheme.titleSmall?.copyWith(
+            fontWeight: FontWeight.w700,
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+        ),
+      ),
+    ];
+
+    widgets.addAll(debts.asMap().entries.map((entry) {
+      final index = entry.key;
+      final debt = entry.value;
+      final currentBal = debt.currentProjectedBalance(referenceDate);
+      final pct = totalDebt > 0 ? currentBal / totalDebt : 0.0;
+      final monthlyInterest = debt.projectedMonthlyInterest(referenceDate);
+      final aprColor = debt.apr >= 30
+          ? theme.colorScheme.error
+          : debt.apr >= 20
+              ? Colors.orange
+              : Colors.green;
+      final isOther = debt.debtType == DebtType.other;
+
+      return Column(
+        children: [
+          InkWell(
+            onTap: () => context.push('/debts/${debt.id}'),
+            borderRadius: BorderRadius.circular(8),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 10),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                debt.name,
+                                style: theme.textTheme.bodyMedium
+                                    ?.copyWith(fontWeight: FontWeight.w600),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            if (!isOther)
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: aprColor.withValues(alpha: 0.12),
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: Text(
+                                  '${debt.apr.toStringAsFixed(1)}% APR',
+                                  style: theme.textTheme.labelSmall?.copyWith(
+                                    color: aprColor,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                        const SizedBox(height: 4),
+                        Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 6,
+                                vertical: 2,
+                              ),
+                              decoration: BoxDecoration(
+                                color: theme.colorScheme.secondaryContainer,
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Text(
+                                debt.debtType.label,
+                                style: theme.textTheme.labelSmall?.copyWith(
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  _currency.format(currentBal),
+                                  style: theme.textTheme.titleSmall,
+                                ),
+                                if (debt.originalBalance != currentBal)
+                                  Text(
+                                    'Original: ${_currency.format(debt.originalBalance)}',
+                                    style: theme.textTheme.labelSmall?.copyWith(
+                                      color: theme.colorScheme.onSurfaceVariant,
+                                    ),
+                                  ),
+                                if (debt.isLoan && debt.loanEndDate != null)
+                                  Text(
+                                    'Ends ${_monthFormat.format(debt.loanEndDate!)}',
+                                    style: theme.textTheme.labelSmall?.copyWith(
+                                      color: theme.colorScheme.onSurfaceVariant,
+                                    ),
+                                  ),
+                              ],
+                            ),
+                            const Spacer(),
+                            Text(
+                              isOther
+                                  ? '£${debt.projectedMinPayment(referenceDate).toStringAsFixed(2)}/mo payment'
+                                  : '£${monthlyInterest.toStringAsFixed(2)}/mo interest',
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: isOther
+                                    ? theme.colorScheme.primary
+                                    : theme.colorScheme.error,
+                              ),
+                            ),
+                            const SizedBox(width: 4),
+                            Icon(Icons.chevron_right,
+                                size: 16,
+                                color: theme.colorScheme.onSurfaceVariant),
+                          ],
+                        ),
+                        const SizedBox(height: 6),
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(4),
+                          child: LinearProgressIndicator(
+                            value: pct.clamp(0.0, 1.0),
+                            minHeight: 5,
+                            backgroundColor:
+                                theme.colorScheme.surfaceContainerHighest,
+                            valueColor: AlwaysStoppedAnimation<Color>(
+                              (isOther ? theme.colorScheme.primary : aprColor)
+                                  .withValues(alpha: 0.7),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              '${(pct * 100).toStringAsFixed(1)}% of total debt',
+                              style: theme.textTheme.labelSmall?.copyWith(
+                                color: theme.colorScheme.onSurfaceVariant,
+                              ),
+                            ),
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                InkWell(
+                                  onTap: () => _openEditDebtForm(debt.id),
+                                  borderRadius: BorderRadius.circular(20),
+                                  child: Padding(
+                                    padding: const EdgeInsets.all(4),
+                                    child: Icon(Icons.edit_outlined,
+                                        size: 16,
+                                        color:
+                                            theme.colorScheme.onSurfaceVariant),
+                                  ),
+                                ),
+                                const SizedBox(width: 4),
+                                InkWell(
+                                  onTap: () =>
+                                      _confirmDeleteDebt(debt.id, debt.name),
+                                  borderRadius: BorderRadius.circular(20),
+                                  child: Padding(
+                                    padding: const EdgeInsets.all(4),
+                                    child: Icon(Icons.delete_outline,
+                                        size: 16,
+                                        color: theme.colorScheme.error),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          if (index < debts.length - 1) const Divider(height: 1),
+        ],
+      );
+    }));
+
+    widgets.add(const SizedBox(height: 6));
+    return widgets;
   }
 
   Widget _buildStatChip({

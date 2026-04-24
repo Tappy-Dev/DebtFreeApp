@@ -8,6 +8,7 @@ enum BudgetItemType {
   income,
   expense,
   bill,
+  subscription,
 }
 
 class BudgetItemFormController {
@@ -34,6 +35,10 @@ class BudgetItemFormController {
       return '$fieldName must be a valid amount.';
     }
 
+    if (!AmountParser.hasMaxDecimalPlaces(value, 2)) {
+      return '$fieldName can have at most 2 decimal places.';
+    }
+
     if (parsed == 0) {
       return '$fieldName must be greater than 0.';
     }
@@ -47,7 +52,17 @@ class BudgetItemFormController {
     required String name,
     required String amount,
     bool trackable = false,
+    int? paymentDay,
   }) {
+    final nameError = validateRequired(name, 'Name');
+    if (nameError != null) {
+      throw ArgumentError(nameError);
+    }
+    final amountError = validateAmount(amount, 'Amount');
+    if (amountError != null) {
+      throw ArgumentError(amountError);
+    }
+
     final monthKey = _repository.activeBudgetMonth;
     final id = itemId == null || itemId.trim().isEmpty
         ? _buildId(type, name, monthKey)
@@ -74,6 +89,21 @@ class BudgetItemFormController {
           name: trimmedName,
           amount: parsedAmount,
           monthKey: monthKey,
+          paymentDay: paymentDay ?? 1,
+        ),
+      );
+      return;
+    }
+
+    if (type == BudgetItemType.subscription) {
+      _repository.saveBill(
+        Expense(
+          id: id,
+          name: trimmedName,
+          amount: parsedAmount,
+          monthKey: monthKey,
+          isSubscription: true,
+          paymentDay: paymentDay ?? 1,
         ),
       );
       return;
@@ -102,21 +132,74 @@ class BudgetItemFormController {
     String monthlyNiableBenefits = '0',
     String monthlyStudentLoanableBenefits = '0',
   }) {
+    final nameError = validateRequired(name, 'Income name');
+    if (nameError != null) {
+      throw ArgumentError(nameError);
+    }
+    final grossError = validateAmount(annualGross, 'Annual gross salary');
+    if (grossError != null) {
+      throw ArgumentError(grossError);
+    }
+
+    final pensionError =
+        validateNonNegativeMoney(monthlyPensionSacrifice, 'Pension sacrifice');
+    if (pensionError != null) {
+      throw ArgumentError(pensionError);
+    }
+    final carError =
+        validateNonNegativeMoney(monthlyCarSacrifice, 'Car sacrifice');
+    if (carError != null) {
+      throw ArgumentError(carError);
+    }
+    final otherError =
+        validateNonNegativeMoney(monthlyOtherSacrifice, 'Other sacrifice');
+    if (otherError != null) {
+      throw ArgumentError(otherError);
+    }
+    final taxableError =
+        validateNonNegativeMoney(monthlyTaxableBenefits, 'Taxable benefits');
+    if (taxableError != null) {
+      throw ArgumentError(taxableError);
+    }
+    final niableError =
+        validateNonNegativeMoney(monthlyNiableBenefits, 'NI-able benefits');
+    if (niableError != null) {
+      throw ArgumentError(niableError);
+    }
+    final loanableError = validateNonNegativeMoney(
+      monthlyStudentLoanableBenefits,
+      'Student-loanable benefits',
+    );
+    if (loanableError != null) {
+      throw ArgumentError(loanableError);
+    }
+
+    final sacrificeError = validateSalarySacrificeTotal(
+      annualGross: annualGross,
+      monthlyPensionSacrifice: monthlyPensionSacrifice,
+      monthlyCarSacrifice: monthlyCarSacrifice,
+      monthlyOtherSacrifice: monthlyOtherSacrifice,
+    );
+    if (sacrificeError != null) {
+      throw ArgumentError(sacrificeError);
+    }
+
     final monthKey = _repository.activeBudgetMonth;
     final id = itemId == null || itemId.trim().isEmpty
         ? _buildId(BudgetItemType.income, name, monthKey)
         : itemId;
     final parsedGross = AmountParser.tryParse(annualGross)!;
     final parsedPensionSacrifice =
-      AmountParser.tryParse(monthlyPensionSacrifice) ?? 0;
+        AmountParser.tryParse(monthlyPensionSacrifice) ?? 0;
     final parsedCarSacrifice = AmountParser.tryParse(monthlyCarSacrifice) ?? 0;
     final parsedOtherSacrifice =
-      AmountParser.tryParse(monthlyOtherSacrifice) ?? 0;
+        AmountParser.tryParse(monthlyOtherSacrifice) ?? 0;
     final parsedTaxableBenefits =
-      AmountParser.tryParse(monthlyTaxableBenefits) ?? 0;
-    final parsedNiableBenefits = AmountParser.tryParse(monthlyNiableBenefits) ?? 0;
+        AmountParser.tryParse(monthlyTaxableBenefits) ?? 0;
+    final parsedNiableBenefits =
+        AmountParser.tryParse(monthlyNiableBenefits) ?? 0;
     final parsedStudentLoanableBenefits =
-      AmountParser.tryParse(monthlyStudentLoanableBenefits) ?? 0;
+        AmountParser.tryParse(monthlyStudentLoanableBenefits) ?? 0;
     final trimmedName = name.trim();
 
     _repository.saveIncomeSource(
@@ -146,6 +229,34 @@ class BudgetItemFormController {
       return '$fieldName must be a valid amount.';
     }
 
+    if (!AmountParser.hasMaxDecimalPlaces(value, 2)) {
+      return '$fieldName can have at most 2 decimal places.';
+    }
+
+    return null;
+  }
+
+  String? validateSalarySacrificeTotal({
+    required String annualGross,
+    required String monthlyPensionSacrifice,
+    required String monthlyCarSacrifice,
+    required String monthlyOtherSacrifice,
+  }) {
+    final parsedGross = AmountParser.tryParse(annualGross);
+    if (parsedGross == null || parsedGross <= 0) {
+      return null;
+    }
+
+    final totalSacrifice =
+        (AmountParser.tryParse(monthlyPensionSacrifice) ?? 0) +
+            (AmountParser.tryParse(monthlyCarSacrifice) ?? 0) +
+            (AmountParser.tryParse(monthlyOtherSacrifice) ?? 0);
+
+    final grossMonthly = parsedGross / 12;
+    if (totalSacrifice > grossMonthly) {
+      return 'Total salary sacrifice cannot exceed gross monthly pay.';
+    }
+
     return null;
   }
 
@@ -160,7 +271,9 @@ class BudgetItemFormController {
         ? 'income'
         : type == BudgetItemType.bill
             ? 'bill'
-            : 'expense';
+            : type == BudgetItemType.subscription
+                ? 'subscription'
+                : 'expense';
     return normalized.isEmpty
         ? '$monthKey-$prefix-${DateTime.now().millisecondsSinceEpoch}'
         : '$monthKey-$prefix-$normalized';

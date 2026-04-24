@@ -2,12 +2,11 @@ import 'package:debt_free_app/core/data/session_financial_repository.dart';
 import 'package:debt_free_app/core/utils/financial_month.dart';
 import 'package:debt_free_app/features/budget/domain/build_budget_snapshot.dart';
 import 'package:debt_free_app/features/home/domain/build_home_overview.dart';
-import 'package:debt_free_app/features/home/domain/home_overview.dart';
 import 'package:debt_free_app/features/simulation/models/scenario_change.dart';
 import 'package:debt_free_app/features/tracking/domain/build_monthly_budget_summary.dart';
 import 'package:debt_free_app/features/tracking/models/monthly_budget_summary.dart';
+import 'package:debt_free_app/features/tracking/models/tracking_workflow_status.dart';
 import 'package:debt_free_app/shared/widgets/app_shell_scaffold.dart';
-import 'package:debt_free_app/shared/widgets/empty_state_card.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
@@ -68,6 +67,18 @@ class _HomeScreenState extends State<HomeScreen> {
     final currency = NumberFormat.currency(
         locale: 'en_GB', symbol: '\u00A3', decimalDigits: 2);
 
+    final hasIncome = _repository.getIncomeSources().isNotEmpty;
+    final hasDebts = _repository.getDebts().isNotEmpty;
+    final hasBudgetItems = _repository.getBills().isNotEmpty ||
+        _repository.getSubscriptions().isNotEmpty;
+    final hasFinanceSettings =
+      (_repository.appStartMonth != null &&
+        _repository.appStartMonth!.isNotEmpty) ||
+      _repository.financialMonthStartDay != 1;
+    final hasAnyData = hasIncome || hasDebts || hasBudgetItems;
+    final allSetupDone =
+      hasIncome && hasBudgetItems && hasDebts && hasFinanceSettings;
+
     return AppShellScaffold(
       title: 'Debt Free',
       currentIndex: 0,
@@ -79,34 +90,47 @@ class _HomeScreenState extends State<HomeScreen> {
                     fontWeight: FontWeight.bold,
                   )),
           const SizedBox(height: 16),
-          if (_repository.getDebts().isEmpty) ...<Widget>[
-            const EmptyStateCard(
-              title: 'Start with your first debt',
-              message: 'Add a debt and some budget details to unlock a more useful payoff forecast.',
+          if (!allSetupDone) ...<Widget>[
+            _SetupGuideCard(
+              hasIncome: hasIncome,
+              hasBudgetItems: hasBudgetItems,
+              hasDebts: hasDebts,
+              hasFinanceSettings: hasFinanceSettings,
+              onTap: (route) => context.push(route),
             ),
             const SizedBox(height: 16),
           ],
-          _MonthlySummaryCard(
-            snapshot: snapshot,
-            trackingSummary: _trackingSummary,
-            extraDebtPayment: _repository.getScenarioChanges()
-                .where((c) => c.changeType == ChangeType.extraPayment)
-                .fold(0.0, (sum, c) => sum + c.amount),
-            currency: currency,
-            onTap: () => context.push('/monthly-summary'),
-          ),
-          const SizedBox(height: 16),
-          _DebtSnapshotCard(
-            totalDebt: overview.totalDebt,
-            debtFreeDate: overview.debtFreeDateLabel,
-            interestProjection: overview.interestProjection,
-            debtChangeFromPreviousMonth: overview.debtChangeFromPreviousMonth,
-            currency: currency,
-            onTap: () => context.push('/debt-summary'),
-          ),
-          const SizedBox(height: 16),
+          if (hasAnyData) ...<Widget>[
+            if (_trackingSummary != null && !_trackingSummary!.period.isClosed) ...<Widget>[
+              _TrackingWorkflowReminderCard(
+                summary: _trackingSummary!,
+                onOpenTracking: () => context.push('/tracking'),
+              ),
+              const SizedBox(height: 16),
+            ],
+            _MonthlySummaryCard(
+              snapshot: snapshot,
+              trackingSummary: _trackingSummary,
+              extraDebtPayment: _repository.getScenarioChanges()
+                  .where((c) => c.changeType == ChangeType.extraPayment)
+                  .fold(0.0, (sum, c) => sum + c.amount),
+              currency: currency,
+              onTap: () => context.push('/monthly-summary'),
+            ),
+            const SizedBox(height: 16),
+            _DebtSnapshotCard(
+              totalDebt: overview.totalDebt,
+              debtFreeDate: overview.debtFreeDateLabel,
+              interestProjection: overview.interestProjection,
+              debtChangeFromPreviousMonth: overview.debtChangeFromPreviousMonth,
+              currency: currency,
+              onTap: () => context.push('/debt-summary'),
+            ),
+            const SizedBox(height: 16),
+          ],
           if (overview.mortgage != null) ...<Widget>[
             _MortgageSummaryCard(
+              mortgageCount: overview.mortgageCount,
               balance: overview.mortgage!.balance,
               monthlyPayment: overview.mortgage!.monthlyPayment,
               annualRate: overview.mortgage!.annualRate,
@@ -464,20 +488,158 @@ class _StatChip extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
+            mainAxisSize: MainAxisSize.min,
             children: [
               Icon(icon, size: 12, color: color),
               const SizedBox(width: 4),
-              Text(label,
-                  style: theme.textTheme.labelSmall?.copyWith(color: color)),
+              Flexible(
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.labelSmall?.copyWith(color: color),
+                ),
+              ),
             ],
           ),
           const SizedBox(height: 2),
-          Text(value,
-              style: theme.textTheme.bodySmall?.copyWith(
-                fontWeight: FontWeight.w600,
-                color: theme.colorScheme.onSurface,
-              )),
+          Text(
+            value,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: theme.textTheme.bodySmall?.copyWith(
+              fontWeight: FontWeight.w600,
+              color: theme.colorScheme.onSurface,
+            ),
+          ),
         ],
+      ),
+    );
+  }
+}
+
+class _TrackingWorkflowReminderCard extends StatelessWidget {
+  const _TrackingWorkflowReminderCard({
+    required this.summary,
+    required this.onOpenTracking,
+  });
+
+  final MonthlyBudgetSummary summary;
+  final VoidCallback onOpenTracking;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final repo = SessionFinancialRepository.instance;
+    final currentKey = repo.currentMonthKeyWithStartDay();
+    final summaryKey = '${summary.period.year}-${summary.period.month.toString().padLeft(2, '0')}';
+    final status = buildTrackingWorkflowStatus(
+      summary: summary,
+      now: repo.effectiveNow,
+      financialMonthStartDay: repo.financialMonthStartDay,
+      isCurrentPeriod: summaryKey == currentKey,
+    );
+    final (icon, accentColor) = _workflowPresentation(theme, status.stage);
+
+    return Card(
+      clipBehavior: Clip.antiAlias,
+      child: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [
+              accentColor.withValues(alpha: 0.16),
+              theme.colorScheme.surface,
+            ],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(18),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(icon, size: 20, color: accentColor),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      status.title,
+                      style: theme.textTheme.titleMedium,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Text(
+                status.message,
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  _WorkflowPill(
+                    label: 'Trackable',
+                    value: '${status.trackableStartedCount}/${status.trackableTotalCount}',
+                  ),
+                  _WorkflowPill(
+                    label: 'Extra items',
+                    value: '${status.extraExpenseCount}',
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              FilledButton.tonalIcon(
+                onPressed: onOpenTracking,
+                icon: const Icon(Icons.checklist_rounded, size: 18),
+                label: Text(status.canCloseMonth ? 'Review in Tracking' : 'Open Tracking'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+(IconData, Color) _workflowPresentation(ThemeData theme, TrackingWorkflowStage stage) {
+  switch (stage) {
+    case TrackingWorkflowStage.gettingStarted:
+      return (Icons.play_circle_outline_rounded, theme.colorScheme.primary);
+    case TrackingWorkflowStage.inProgress:
+      return (Icons.timeline_rounded, theme.colorScheme.tertiary);
+    case TrackingWorkflowStage.readyToClose:
+      return (Icons.task_alt_rounded, Colors.orange.shade700);
+    case TrackingWorkflowStage.overdue:
+      return (Icons.notification_important_outlined, theme.colorScheme.error);
+    case TrackingWorkflowStage.closed:
+      return (Icons.lock_outline_rounded, Colors.green.shade700);
+  }
+}
+
+class _WorkflowPill extends StatelessWidget {
+  const _WorkflowPill({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        '$label: $value',
+        style: theme.textTheme.labelMedium,
       ),
     );
   }
@@ -485,6 +647,7 @@ class _StatChip extends StatelessWidget {
 
 class _MortgageSummaryCard extends StatelessWidget {
   const _MortgageSummaryCard({
+    required this.mortgageCount,
     required this.balance,
     required this.monthlyPayment,
     required this.annualRate,
@@ -493,6 +656,7 @@ class _MortgageSummaryCard extends StatelessWidget {
     required this.onTap,
   });
 
+  final int mortgageCount;
   final double balance;
   final double monthlyPayment;
   final double annualRate;
@@ -520,7 +684,10 @@ class _MortgageSummaryCard extends StatelessWidget {
                   Icon(Icons.home_outlined,
                       size: 20, color: theme.colorScheme.primary),
                   const SizedBox(width: 8),
-                  Text('Mortgage', style: theme.textTheme.titleLarge),
+                  Text(
+                    mortgageCount > 1 ? 'Mortgages' : 'Mortgage',
+                    style: theme.textTheme.titleLarge,
+                  ),
                   const Spacer(),
                   Icon(Icons.arrow_forward_ios_rounded,
                       size: 14, color: theme.colorScheme.onSurfaceVariant),
@@ -573,7 +740,7 @@ class _MortgageSummaryCard extends StatelessWidget {
                   const SizedBox(width: 10),
                   Expanded(
                     child: _StatChip(
-                      label: 'Rate',
+                      label: mortgageCount > 1 ? 'Avg Rate' : 'Rate',
                       value: '${annualRate.toStringAsFixed(2)}%',
                       icon: Icons.percent_rounded,
                       color: Colors.orange,
@@ -613,114 +780,175 @@ class _MortgageSummaryCard extends StatelessWidget {
   }
 }
 
-class _ForecastTable extends StatelessWidget {
-  const _ForecastTable({
-    required this.forecasts,
-    required this.showMortgage,
+class _SetupGuideCard extends StatelessWidget {
+  const _SetupGuideCard({
+    required this.hasIncome,
+    required this.hasBudgetItems,
+    required this.hasDebts,
+    required this.hasFinanceSettings,
+    required this.onTap,
   });
 
-  final List<MonthForecast> forecasts;
-  final bool showMortgage;
+  final bool hasIncome;
+  final bool hasBudgetItems;
+  final bool hasDebts;
+  final bool hasFinanceSettings;
+  final void Function(String route) onTap;
 
   @override
   Widget build(BuildContext context) {
-    final currency = NumberFormat.currency(symbol: '£', decimalDigits: 0);
     final theme = Theme.of(context);
-    final headerStyle = theme.textTheme.bodySmall?.copyWith(
-      fontWeight: FontWeight.bold,
-      color: theme.colorScheme.onSurfaceVariant,
-    );
-    final labelStyle = theme.textTheme.bodySmall?.copyWith(
-      color: theme.colorScheme.onSurfaceVariant,
-    );
+    final cs = theme.colorScheme;
 
-    return Table(
-      defaultVerticalAlignment: TableCellVerticalAlignment.middle,
-      columnWidths: const {
-        0: FlexColumnWidth(2.2),
-        1: FlexColumnWidth(1.6),
-        2: FlexColumnWidth(1.6),
-        3: FlexColumnWidth(1.6),
-      },
-      children: [
-        // Header row
-        TableRow(
-          decoration: BoxDecoration(
-            border: Border(
-              bottom: BorderSide(
-                color: theme.colorScheme.outlineVariant,
-                width: 0.8,
-              ),
-            ),
-          ),
+    final steps = <Widget>[];
+    if (!hasIncome) {
+      steps.add(_SetupStep(
+        icon: Icons.attach_money_rounded,
+        title: 'Add your income',
+        description: 'So we can calculate how much cash you have each month.',
+        route: '/budget/income/new',
+        onTap: onTap,
+      ));
+    }
+    if (!hasBudgetItems) {
+      if (steps.isNotEmpty) steps.add(const SizedBox(height: 12));
+      steps.add(_SetupStep(
+        icon: Icons.receipt_long_outlined,
+        title: 'Add your bills & expenses',
+        description: 'Regular outgoings so your remaining cash is accurate.',
+        route: '/budget',
+        onTap: onTap,
+      ));
+    }
+    if (!hasDebts) {
+      if (steps.isNotEmpty) steps.add(const SizedBox(height: 12));
+      steps.add(_SetupStep(
+        icon: Icons.credit_card_outlined,
+        title: 'Add a debt',
+        description: 'Credit cards, loans or any balance you want to pay off.',
+        route: '/debts',
+        onTap: onTap,
+      ));
+    }
+    if (!hasFinanceSettings) {
+      if (steps.isNotEmpty) steps.add(const SizedBox(height: 12));
+      steps.add(_SetupStep(
+        icon: Icons.tune_rounded,
+        title: 'Set up finance settings',
+        description:
+            'Set budget start month and financial month start day for accurate periods.',
+        route: '/settings/finance',
+        onTap: onTap,
+      ));
+    }
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Padding(
-              padding: const EdgeInsets.only(bottom: 6),
-              child: Text('', style: headerStyle),
+            Row(
+              children: [
+                Icon(Icons.rocket_launch_outlined, color: cs.primary, size: 22),
+                const SizedBox(width: 10),
+                Text('Get started', style: theme.textTheme.titleLarge),
+              ],
             ),
-            for (final f in forecasts)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 6),
-                child: Text(f.label, style: headerStyle, textAlign: TextAlign.right),
+            const SizedBox(height: 8),
+            Text(
+              'Complete these steps to unlock your personalised debt payoff forecast and monthly budget overview.',
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: cs.onSurfaceVariant,
               ),
+            ),
+            const SizedBox(height: 20),
+            ...steps,
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Icon(Icons.help_outline_rounded,
+                    size: 14, color: cs.onSurfaceVariant),
+                const SizedBox(width: 6),
+                Text(
+                  'Not sure where to start? Tap the ? button above.',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: cs.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ),
           ],
         ),
-        _dataRow(
-          label: 'Cash left',
-          values: forecasts.map((f) => currency.format(f.cashLeft)).toList(),
-          labelStyle: labelStyle,
-          theme: theme,
-          highlight: true,
-        ),
-        _dataRow(
-          label: 'Debt interest',
-          values: forecasts.map((f) => currency.format(f.debtInterest)).toList(),
-          labelStyle: labelStyle,
-          theme: theme,
-        ),
-        if (showMortgage)
-          _dataRow(
-            label: 'Mortgage interest',
-            values: forecasts
-                .map((f) => f.mortgageInterest != null
-                    ? currency.format(f.mortgageInterest!)
-                    : '—')
-                .toList(),
-            labelStyle: labelStyle,
-            theme: theme,
-          ),
-        _dataRow(
-          label: 'Debt balance',
-          values: forecasts.map((f) => currency.format(f.debtBalance)).toList(),
-          labelStyle: labelStyle,
-          theme: theme,
-        ),
-      ],
+      ),
     );
   }
+}
 
-  TableRow _dataRow({
-    required String label,
-    required List<String> values,
-    TextStyle? labelStyle,
-    required ThemeData theme,
-    bool highlight = false,
-  }) {
-    final valueStyle = theme.textTheme.bodySmall?.copyWith(
-      fontWeight: highlight ? FontWeight.bold : FontWeight.normal,
-    );
-    return TableRow(
-      children: [
-        Padding(
-          padding: const EdgeInsets.symmetric(vertical: 5),
-          child: Text(label, style: labelStyle),
+class _SetupStep extends StatelessWidget {
+  const _SetupStep({
+    required this.icon,
+    required this.title,
+    required this.description,
+    required this.route,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String title;
+  final String description;
+  final String route;
+  final void Function(String route) onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+
+    return InkWell(
+      borderRadius: BorderRadius.circular(12),
+      onTap: () => onTap(route),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        decoration: BoxDecoration(
+          color: cs.surfaceContainerLow,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: cs.outlineVariant),
         ),
-        for (final v in values)
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 5),
-            child: Text(v, style: valueStyle, textAlign: TextAlign.right),
-          ),
-      ],
+        child: Row(
+          children: [
+            Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                color: cs.primaryContainer,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(icon, size: 18, color: cs.onPrimaryContainer),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title,
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        fontWeight: FontWeight.w600,
+                      )),
+                  const SizedBox(height: 2),
+                  Text(description,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: cs.onSurfaceVariant,
+                      )),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            Icon(Icons.arrow_forward_ios_rounded,
+                size: 14, color: cs.onSurfaceVariant),
+          ],
+        ),
+      ),
     );
   }
 }

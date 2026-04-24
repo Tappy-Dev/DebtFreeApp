@@ -26,6 +26,7 @@ class TimelineChart extends StatelessWidget {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final currency = NumberFormat.compact(locale: 'en_GB');
+    const accent = Color(0xFF6F7CFF);
 
     final spots = <FlSpot>[];
     for (int i = 0; i < dataPoints.length; i++) {
@@ -48,7 +49,7 @@ class TimelineChart extends StatelessWidget {
             horizontalInterval: maxY > 0 ? maxY / 4 : 1,
             getDrawingHorizontalLine: (double value) {
               return FlLine(
-                color: colorScheme.outline.withOpacity(0.15),
+                color: colorScheme.outline.withValues(alpha: 0.25),
                 strokeWidth: 1,
               );
             },
@@ -100,24 +101,34 @@ class TimelineChart extends StatelessWidget {
               spots: spots,
               isCurved: true,
               preventCurveOverShooting: true,
-              color: colorScheme.primary,
+              gradient: const LinearGradient(
+                colors: [Color(0xFF29C6FF), accent],
+              ),
               barWidth: 3,
               isStrokeCapRound: true,
               dotData: const FlDotData(show: false),
               belowBarData: BarAreaData(
                 show: true,
-                color: colorScheme.primary.withOpacity(0.10),
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    accent.withValues(alpha: 0.35),
+                    accent.withValues(alpha: 0.03),
+                  ],
+                ),
               ),
             ),
           ],
           lineTouchData: LineTouchData(
             touchTooltipData: LineTouchTooltipData(
+              getTooltipColor: (LineBarSpot touchedSpot) => colorScheme.surface,
               getTooltipItems: (List<LineBarSpot> touchedSpots) {
                 return touchedSpots.map((LineBarSpot spot) {
                   return LineTooltipItem(
                     '\u00A3${spot.y.toStringAsFixed(0)}',
                     TextStyle(
-                      color: colorScheme.onPrimary,
+                      color: colorScheme.onSurface,
                       fontWeight: FontWeight.w600,
                     ),
                   );

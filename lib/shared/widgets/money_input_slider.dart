@@ -45,52 +45,61 @@ class _MoneyInputSliderState extends State<MoneyInputSlider> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: <Widget>[
-        Row(
-          children: <Widget>[
-            Expanded(
-              child: Text(
-                widget.label,
-                style: theme.textTheme.titleMedium,
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.45),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: theme.colorScheme.outlineVariant),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Row(
+            children: <Widget>[
+              Expanded(
+                child: Text(
+                  widget.label,
+                  style: theme.textTheme.titleMedium,
+                ),
               ),
-            ),
-            Text(
-              '${widget.prefix}${_currentValue.toStringAsFixed(0)}',
-              style: theme.textTheme.titleMedium?.copyWith(
-                color: theme.colorScheme.primary,
+              Text(
+                '${widget.prefix}${_currentValue.toStringAsFixed(0)}',
+                style: theme.textTheme.titleMedium?.copyWith(
+                  color: theme.colorScheme.primary,
+                  fontWeight: FontWeight.w800,
+                ),
               ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 4),
-        Slider(
-          value: _currentValue,
-          min: widget.min,
-          max: widget.max,
-          divisions: widget.divisions,
-          onChanged: (double value) {
-            setState(() {
-              _currentValue = value;
-            });
-            widget.onChanged(value);
-          },
-        ),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: <Widget>[
-            Text(
-              '${widget.prefix}${widget.min.toStringAsFixed(0)}',
-              style: theme.textTheme.bodySmall,
-            ),
-            Text(
-              '${widget.prefix}${widget.max.toStringAsFixed(0)}',
-              style: theme.textTheme.bodySmall,
-            ),
-          ],
-        ),
-      ],
+            ],
+          ),
+          const SizedBox(height: 4),
+          Slider(
+            value: _currentValue,
+            min: widget.min,
+            max: widget.max,
+            divisions: widget.divisions,
+            onChanged: (double value) {
+              setState(() {
+                _currentValue = value;
+              });
+              widget.onChanged(value);
+            },
+          ),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: <Widget>[
+              Text(
+                '${widget.prefix}${widget.min.toStringAsFixed(0)}',
+                style: theme.textTheme.bodySmall,
+              ),
+              Text(
+                '${widget.prefix}${widget.max.toStringAsFixed(0)}',
+                style: theme.textTheme.bodySmall,
+              ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 }

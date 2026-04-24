@@ -111,10 +111,12 @@ class DebtAccount {
     this.payoffDate,
     this.startDate,
     this.loanEndDate,
+    int paymentDay = 1,
     this.minPaymentRule = const MinPaymentRule(type: MinPaymentType.fixed),
     double? originalBalance,
     List<DebtExtraPayment>? extraPayments,
   })  : minimumPayment = minimumPayment ?? payment ?? 0,
+        paymentDay = paymentDay.clamp(1, 28),
         originalBalance = originalBalance ?? balance,
         extraPayments = extraPayments ?? const [];
 
@@ -133,6 +135,9 @@ class DebtAccount {
 
   /// Scheduled final payment month for amortizing loans.
   final DateTime? loanEndDate;
+
+  /// Day of month this debt payment is usually collected.
+  final int paymentDay;
 
   /// The rule that determines how minimum payments are calculated.
   final MinPaymentRule minPaymentRule;
@@ -295,6 +300,7 @@ class DebtAccount {
       payoffDate: payoffDate,
       startDate: startDate,
       loanEndDate: loanEndDate,
+      paymentDay: paymentDay,
       minPaymentRule: minPaymentRule,
       originalBalance: originalBalance,
       extraPayments: extraPayments,

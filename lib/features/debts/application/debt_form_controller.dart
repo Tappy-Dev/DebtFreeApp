@@ -26,11 +26,25 @@ class DebtFormController {
       return '$fieldName must be a valid amount.';
     }
 
+    if (!AmountParser.hasMaxDecimalPlaces(value, 2)) {
+      return '$fieldName can have at most 2 decimal places.';
+    }
+
     return null;
   }
 
   String? validateBalance(String? value) {
-    return validateMoney(value, 'Balance');
+    final parsedError = validateMoney(value, 'Balance');
+    if (parsedError != null) {
+      return parsedError;
+    }
+
+    final parsed = AmountParser.tryParse(value)!;
+    if (parsed <= 0) {
+      return 'Balance must be greater than 0.';
+    }
+
+    return null;
   }
 
   String? validateApr(String? value) {
@@ -45,6 +59,13 @@ class DebtFormController {
     }
 
     return null;
+  }
+
+  String? validateAprForDebtType(String? value, DebtType debtType) {
+    if (debtType == DebtType.other) {
+      return null;
+    }
+    return validateApr(value);
   }
 
   String? validateMinimumPayment(String? value) {
@@ -131,6 +152,7 @@ class DebtFormController {
     required String balance,
     required String apr,
     required String minimumPayment,
+    int paymentDay = 1,
     MinPaymentType minPaymentType = MinPaymentType.interestPlusPercentage,
     String percentage = '1.0',
     String floor = '25',
@@ -138,8 +160,55 @@ class DebtFormController {
     DateTime? loanEndDate,
     List<DebtExtraPayment>? extraPayments,
   }) {
+    final nameError = validateRequired(name, 'Debt name');
+    if (nameError != null) {
+      throw ArgumentError(nameError);
+    }
+
+    final balanceError = validateBalance(balance);
+    if (balanceError != null) {
+      throw ArgumentError(balanceError);
+    }
+
+    if (debtType != DebtType.other) {
+      final aprError = validateApr(apr);
+      if (aprError != null) {
+        throw ArgumentError(aprError);
+      }
+    }
+
+    if (debtType == DebtType.other ||
+        (debtType != DebtType.loan && minPaymentType == MinPaymentType.fixed)) {
+      final minPaymentError = validateMinimumPayment(minimumPayment);
+      if (minPaymentError != null) {
+        throw ArgumentError(minPaymentError);
+      }
+    }
+
+    if (debtType != DebtType.loan && minPaymentType != MinPaymentType.fixed) {
+      final percentageError = validatePercentage(percentage);
+      if (percentageError != null) {
+        throw ArgumentError(percentageError);
+      }
+      final floorError = validateFloor(floor);
+      if (floorError != null) {
+        throw ArgumentError(floorError);
+      }
+    }
+
+    if (debtType == DebtType.loan) {
+      final loanTermError = validateLoanTerm(
+        startDate ?? DateTime.now(),
+        loanEndDate,
+      );
+      if (loanTermError != null) {
+        throw ArgumentError(loanTermError);
+      }
+    }
+
     final parsedBalance = AmountParser.tryParse(balance)!;
-    final parsedApr = AmountParser.tryParse(apr)!;
+    final parsedApr =
+        debtType == DebtType.other ? 0.0 : (AmountParser.tryParse(apr) ?? 0.0);
     final resolvedMinPayment = debtType == DebtType.loan
         ? estimateLoanPayment(
               balance: balance,
@@ -148,7 +217,9 @@ class DebtFormController {
               endDate: loanEndDate,
             ) ??
             0
-        : AmountParser.tryParse(minimumPayment) ?? 0;
+        : debtType == DebtType.other
+            ? (AmountParser.tryParse(minimumPayment) ?? 0)
+            : AmountParser.tryParse(minimumPayment) ?? 0;
     final debt = DebtAccount(
       id: debtId == null || debtId.trim().isEmpty ? _buildId(name) : debtId,
       name: name.trim(),
@@ -156,10 +227,13 @@ class DebtFormController {
       balance: parsedBalance,
       apr: parsedApr,
       minimumPayment: resolvedMinPayment,
+      paymentDay: paymentDay,
       startDate: startDate,
       loanEndDate: debtType == DebtType.loan ? loanEndDate : null,
       minPaymentRule: MinPaymentRule(
-        type: debtType == DebtType.loan ? MinPaymentType.fixed : minPaymentType,
+        type: debtType == DebtType.loan || debtType == DebtType.other
+            ? MinPaymentType.fixed
+            : minPaymentType,
         percentage: AmountParser.tryParse(percentage) ?? 1.0,
         floor: AmountParser.tryParse(floor) ?? 25.0,
       ),
@@ -178,6 +252,8 @@ class DebtFormController {
         .replaceAll(RegExp(r'[^a-z0-9]+'), '-')
         .replaceAll(RegExp(r'^-|-$'), '');
 
-    return normalized.isEmpty ? 'debt-${DateTime.now().millisecondsSinceEpoch}' : normalized;
+    return normalized.isEmpty
+        ? 'debt-${DateTime.now().millisecondsSinceEpoch}'
+        : normalized;
   }
 }

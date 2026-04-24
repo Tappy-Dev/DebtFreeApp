@@ -11,84 +11,74 @@ class AppSettingsDao {
   static const String _keyFinancialMonthStartDay = 'financial_month_start_day';
   static const String _keyDeveloperModeEnabled = 'developer_mode_enabled';
   static const String _keyDeveloperMonthOffset = 'developer_month_offset';
+  static const String _keyDeveloperAccessScenario = 'developer_access_scenario';
 
-  Future<String?> getAppStartMonth() async {
+  Future<String?> getStringSetting(String key) async {
     final rows = await _database.customSelect(
       'SELECT value FROM ${DriftSchema.appSettingsTable} WHERE key = ?',
-      variables: [Variable<String>(_keyAppStartMonth)],
+      variables: [Variable<String>(key)],
     ).get();
     if (rows.isEmpty) return null;
     return rows.first.read<String>('value');
   }
 
-  Future<void> setAppStartMonth(String monthKey) async {
+  Future<void> setStringSetting(String key, String value) async {
     await _database.customStatement(
       '''
       INSERT INTO ${DriftSchema.appSettingsTable} (key, value)
       VALUES (?, ?)
       ON CONFLICT(key) DO UPDATE SET value = excluded.value
       ''',
-      [_keyAppStartMonth, monthKey],
+      [key, value],
     );
+  }
+
+  Future<int> getIntSetting(String key, {int defaultValue = 0}) async {
+    final value = await getStringSetting(key);
+    return int.tryParse(value ?? '') ?? defaultValue;
+  }
+
+  Future<void> setIntSetting(String key, int value) async {
+    await setStringSetting(key, value.toString());
+  }
+
+  Future<String?> getAppStartMonth() async {
+    return getStringSetting(_keyAppStartMonth);
+  }
+
+  Future<void> setAppStartMonth(String monthKey) async {
+    await setStringSetting(_keyAppStartMonth, monthKey);
   }
 
   Future<int> getFinancialMonthStartDay() async {
-    final rows = await _database.customSelect(
-      'SELECT value FROM ${DriftSchema.appSettingsTable} WHERE key = ?',
-      variables: [Variable<String>(_keyFinancialMonthStartDay)],
-    ).get();
-    if (rows.isEmpty) return 1;
-    return int.tryParse(rows.first.read<String>('value')) ?? 1;
+    return getIntSetting(_keyFinancialMonthStartDay, defaultValue: 1);
   }
 
   Future<void> setFinancialMonthStartDay(int day) async {
-    await _database.customStatement(
-      '''
-      INSERT INTO ${DriftSchema.appSettingsTable} (key, value)
-      VALUES (?, ?)
-      ON CONFLICT(key) DO UPDATE SET value = excluded.value
-      ''',
-      [_keyFinancialMonthStartDay, day.clamp(1, 28).toString()],
-    );
+    await setIntSetting(_keyFinancialMonthStartDay, day.clamp(1, 28));
   }
 
   Future<bool> getDeveloperModeEnabled() async {
-    final rows = await _database.customSelect(
-      'SELECT value FROM ${DriftSchema.appSettingsTable} WHERE key = ?',
-      variables: [Variable<String>(_keyDeveloperModeEnabled)],
-    ).get();
-    if (rows.isEmpty) return false;
-    return rows.first.read<String>('value') == 'true';
+    return (await getStringSetting(_keyDeveloperModeEnabled)) == 'true';
   }
 
   Future<void> setDeveloperModeEnabled(bool enabled) async {
-    await _database.customStatement(
-      '''
-      INSERT INTO ${DriftSchema.appSettingsTable} (key, value)
-      VALUES (?, ?)
-      ON CONFLICT(key) DO UPDATE SET value = excluded.value
-      ''',
-      [_keyDeveloperModeEnabled, enabled ? 'true' : 'false'],
-    );
+    await setStringSetting(_keyDeveloperModeEnabled, enabled ? 'true' : 'false');
   }
 
   Future<int> getDeveloperMonthOffset() async {
-    final rows = await _database.customSelect(
-      'SELECT value FROM ${DriftSchema.appSettingsTable} WHERE key = ?',
-      variables: [Variable<String>(_keyDeveloperMonthOffset)],
-    ).get();
-    if (rows.isEmpty) return 0;
-    return int.tryParse(rows.first.read<String>('value')) ?? 0;
+    return getIntSetting(_keyDeveloperMonthOffset);
   }
 
   Future<void> setDeveloperMonthOffset(int offset) async {
-    await _database.customStatement(
-      '''
-      INSERT INTO ${DriftSchema.appSettingsTable} (key, value)
-      VALUES (?, ?)
-      ON CONFLICT(key) DO UPDATE SET value = excluded.value
-      ''',
-      [_keyDeveloperMonthOffset, offset.toString()],
-    );
+    await setIntSetting(_keyDeveloperMonthOffset, offset);
+  }
+
+  Future<String?> getDeveloperAccessScenario() async {
+    return getStringSetting(_keyDeveloperAccessScenario);
+  }
+
+  Future<void> setDeveloperAccessScenario(String scenario) async {
+    await setStringSetting(_keyDeveloperAccessScenario, scenario);
   }
 }

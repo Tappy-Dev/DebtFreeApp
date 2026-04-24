@@ -28,6 +28,7 @@ class BuildHomeOverview {
 
   HomeOverview call() {
     final debts = _repository.getDebts();
+    final mortgages = _repository.getMortgages();
     final referenceDate = _referenceDate ?? DateTime.now();
     final income = _repository.getAdjustedIncomeSources();
     final expenses = _repository.getAllOutgoings();
@@ -100,10 +101,11 @@ class BuildHomeOverview {
       interestSaved: boosted.totalInterestSaved,
     );
 
-    final projectedMortgage = _projectMortgageToReference(
-      _repository.getMortgage(),
+    final projectedMortgages = _projectMortgagesToReference(
+      mortgages,
       referenceDate,
     );
+    final aggregateMortgage = _aggregateMortgage(projectedMortgages);
 
     return HomeOverview(
       totalDebt: totalDebt,
@@ -133,19 +135,20 @@ class BuildHomeOverview {
       recommendationTitle: recommendation.title,
       recommendationMessage: recommendation.message,
       debtChartData: _buildChartData(boosted.monthlyBreakdown),
-      mortgage: projectedMortgage,
-      mortgagePayoffLabel: _buildMortgagePayoffLabel(),
-      mortgageTotalInterest: _buildMortgageTotalInterest(),
+      mortgage: aggregateMortgage,
+      mortgageCount: projectedMortgages.length,
+      mortgagePayoffLabel: _buildMortgagePayoffLabel(projectedMortgages),
+      mortgageTotalInterest: _buildMortgageTotalInterest(projectedMortgages),
       monthlyDebtInterest: debtsAtReference.fold(
         0,
         (sum, d) => sum + (d.balance <= 0 ? 0 : d.balance * (d.apr / 100) / 12),
       ),
-      monthlyMortgageInterest: projectedMortgage != null
-          ? projectedMortgage.balance *
-              projectedMortgage.annualRate /
-              100 /
-              12
-          : null,
+      monthlyMortgageInterest: projectedMortgages.isEmpty
+          ? null
+          : projectedMortgages.fold<double>(
+              0,
+              (sum, m) => sum + (m.balance <= 0 ? 0 : m.balance * m.annualRate / 100 / 12),
+            ),
       monthlyForecast: _buildMonthlyForecast(boosted.monthlyBreakdown),
     );
   }
@@ -153,25 +156,28 @@ class BuildHomeOverview {
   List<MonthForecast> _buildMonthlyForecast(
     List<ProjectionMonth> breakdown,
   ) {
-    final mortgage = _projectMortgageToReference(
-      _repository.getMortgage(),
+    final projectedMortgages = _projectMortgagesToReference(
+      _repository.getMortgages(),
       _referenceDate ?? DateTime.now(),
     );
-    List<MortgageProjectionMonth>? mortgageBreakdown;
-    if (mortgage != null) {
-      mortgageBreakdown = MortgageProjectionEngine()
-          .simulate(mortgage, startDate: _referenceDate ?? DateTime.now())
-          .monthlyBreakdown;
-    }
+    final mortgageBreakdowns = projectedMortgages
+        .map(
+          (m) => MortgageProjectionEngine()
+              .simulate(m, startDate: _referenceDate ?? DateTime.now())
+              .monthlyBreakdown,
+        )
+        .toList(growable: false);
 
     final forecasts = <MonthForecast>[];
     for (int i = 0; i < 3 && i < breakdown.length; i++) {
       final month = breakdown[i];
       final label = DateFormat('MMM yyyy').format(month.month);
-      final mortgageInterest =
-          (mortgageBreakdown != null && i < mortgageBreakdown.length)
-              ? mortgageBreakdown[i].interestPaid
-              : null;
+      final mortgageInterest = mortgageBreakdowns.isEmpty
+          ? null
+          : mortgageBreakdowns.fold<double>(
+              0,
+              (sum, b) => sum + (i < b.length ? b[i].interestPaid : 0),
+            );
       forecasts.add(MonthForecast(
         label: label,
         cashLeft: month.remainingCash,
@@ -183,37 +189,46 @@ class BuildHomeOverview {
     return forecasts;
   }
 
-  String? _buildMortgagePayoffLabel() {
-    final mortgage = _projectMortgageToReference(
-      _repository.getMortgage(),
-      _referenceDate ?? DateTime.now(),
-    );
-    if (mortgage == null) return null;
-    final result = MortgageProjectionEngine().simulate(
-      mortgage,
-      startDate: _referenceDate ?? DateTime.now(),
-    );
-    return _formatMonthYear(result.payoffDate);
+  String? _buildMortgagePayoffLabel(List<Mortgage> mortgages) {
+    if (mortgages.isEmpty) return null;
+    DateTime? latestPayoff;
+    for (final mortgage in mortgages) {
+      final result = MortgageProjectionEngine().simulate(
+        mortgage,
+        startDate: _referenceDate ?? DateTime.now(),
+      );
+      if (latestPayoff == null || result.payoffDate.isAfter(latestPayoff)) {
+        latestPayoff = result.payoffDate;
+      }
+    }
+    return _formatMonthYear(latestPayoff);
   }
 
-  double? _buildMortgageTotalInterest() {
-    final mortgage = _projectMortgageToReference(
-      _repository.getMortgage(),
-      _referenceDate ?? DateTime.now(),
+  double? _buildMortgageTotalInterest(List<Mortgage> mortgages) {
+    if (mortgages.isEmpty) return null;
+    return mortgages.fold<double>(
+      0,
+      (sum, mortgage) =>
+          sum +
+          MortgageProjectionEngine()
+              .simulate(mortgage, startDate: _referenceDate ?? DateTime.now())
+              .totalInterestPaid,
     );
-    if (mortgage == null) return null;
-    final result = MortgageProjectionEngine().simulate(
-      mortgage,
-      startDate: _referenceDate ?? DateTime.now(),
-    );
-    return result.totalInterestPaid;
   }
 
-  Mortgage? _projectMortgageToReference(
-    Mortgage? mortgage,
+  List<Mortgage> _projectMortgagesToReference(
+    List<Mortgage> mortgages,
     DateTime referenceDate,
   ) {
-    if (mortgage == null) return null;
+    return mortgages
+        .map((mortgage) => _projectMortgageToReference(mortgage, referenceDate))
+        .toList(growable: false);
+  }
+
+  Mortgage _projectMortgageToReference(
+    Mortgage mortgage,
+    DateTime referenceDate,
+  ) {
     final now = DateTime.now();
     final monthOffset =
         (referenceDate.year - now.year) * 12 + (referenceDate.month - now.month);
@@ -235,6 +250,27 @@ class BuildHomeOverview {
     return mortgage.copyWith(
       balance: capped.balanceRemaining,
       remainingTermMonths: adjustedTerm,
+    );
+  }
+
+  Mortgage? _aggregateMortgage(List<Mortgage> mortgages) {
+    if (mortgages.isEmpty) return null;
+    final totalBalance = mortgages.fold<double>(0, (sum, m) => sum + m.balance);
+    final totalMonthly = mortgages.fold<double>(0, (sum, m) => sum + m.totalMonthlyPayment);
+    final weightedRate = totalBalance <= 0
+      ? 0.0
+        : mortgages.fold<double>(0, (sum, m) => sum + (m.annualRate * m.balance)) /
+        totalBalance.toDouble();
+    final longestTerm = mortgages.fold<int>(0, (maxTerm, m) => math.max(maxTerm, m.remainingTermMonths));
+
+    return Mortgage(
+      id: 'mortgage-aggregate',
+      name: mortgages.length == 1 ? mortgages.first.name : '${mortgages.length} mortgages',
+      balance: totalBalance,
+      annualRate: weightedRate,
+      monthlyPayment: totalMonthly,
+      remainingTermMonths: longestTerm,
+      overpayment: 0,
     );
   }
 

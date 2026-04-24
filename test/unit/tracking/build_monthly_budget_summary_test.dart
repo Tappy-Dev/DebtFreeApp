@@ -23,7 +23,6 @@ class _TrackingRepository implements FinancialRepository {
     this.debts = const [],
     this.income = const [],
     this.expenses = const [],
-    this.bills = const [],
   });
 
   @override
@@ -34,6 +33,8 @@ class _TrackingRepository implements FinancialRepository {
   List<Expense> getExpenses() => expenses;
   @override
   List<Expense> getBills() => bills;
+  @override
+  List<Expense> getSubscriptions() => const [];
   @override
   List<ScenarioChange> getScenarioChanges() => const [];
   @override

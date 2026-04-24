@@ -9,9 +9,10 @@ class BuildBudgetSnapshot {
   BudgetSnapshot call() {
     final income = _repository.getIncomeSources();
     final bills = _repository.getBills();
+    final subscriptions = _repository.getSubscriptions();
     final expenses = _repository.getExpenses();
     final debts = _repository.getDebts();
-    final mortgage = _repository.getMortgage();
+    final mortgages = _repository.getMortgages();
     // Monthly net income computed from gross salary minus tax/NI/student loan
     // AND salary sacrifices (which reduce taxable income).
     final totalIncome = income.fold<double>(
@@ -19,6 +20,10 @@ class BuildBudgetSnapshot {
       (double sum, item) => sum + item.monthlyNetAfterSacrifice(),
     );
     final totalBills = bills.fold<double>(
+      0,
+      (double sum, item) => sum + item.amount,
+    );
+    final totalSubscriptions = subscriptions.fold<double>(
       0,
       (double sum, item) => sum + item.amount,
     );
@@ -30,7 +35,10 @@ class BuildBudgetSnapshot {
       0,
       (double sum, item) => sum + item.currentMinPayment(),
     );
-    final mortgagePayment = mortgage?.totalMonthlyPayment ?? 0;
+    final mortgagePayment = mortgages.fold<double>(
+      0,
+      (sum, mortgage) => sum + mortgage.totalMonthlyPayment,
+    );
 
     // True take-home impact of salary sacrifice (not gross sacrificed amount).
     final salarySacrificeNetCost = income.fold<double>(
@@ -44,12 +52,14 @@ class BuildBudgetSnapshot {
     return BudgetSnapshot(
       totalIncome: totalIncome,
       totalBills: totalBills,
+      totalSubscriptions: totalSubscriptions,
       totalExpenses: totalExpenses,
       totalMinimumPayments: totalMinimumPayments,
       mortgagePayment: mortgagePayment,
       salarySacrificeNetCost: salarySacrificeNetCost,
       remainingCash: totalIncome -
           totalBills -
+          totalSubscriptions -
           totalExpenses -
           totalMinimumPayments -
           mortgagePayment,

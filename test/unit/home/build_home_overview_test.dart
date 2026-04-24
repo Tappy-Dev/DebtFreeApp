@@ -104,6 +104,8 @@ class _HomeScenarioRepository implements FinancialRepository {
   @override
   List<Expense> getBills() => const [];
   @override
+  List<Expense> getSubscriptions() => const [];
+  @override
   String get activeBudgetMonth => '';
   @override
   List<String> get availableBudgetMonths => const [];
@@ -275,6 +277,8 @@ class _InconsistentHomeScenarioRepository implements FinancialRepository {
   void deleteSalarySacrifice(String id) {}
   @override
   List<Expense> getBills() => const [];
+  @override
+  List<Expense> getSubscriptions() => const [];
   @override
   String get activeBudgetMonth => '';
   @override

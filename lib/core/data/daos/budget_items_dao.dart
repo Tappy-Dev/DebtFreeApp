@@ -10,10 +10,12 @@ class BudgetItemsDao {
   final DriftFinancialDatabase _database;
 
   Future<List<IncomeSource>> loadIncomeSources() async {
-    final rows = await _database.customSelect(
-      'SELECT ${BudgetItemRecord.selectIncomeColumns} '
-      'FROM ${DriftSchema.incomeSourcesTable} ORDER BY name',
-    ).get();
+    final rows = await _database
+        .customSelect(
+          'SELECT ${BudgetItemRecord.selectIncomeColumns} '
+          'FROM ${DriftSchema.incomeSourcesTable} ORDER BY name',
+        )
+        .get();
 
     return rows
         .map((row) => BudgetItemRecord.incomeFromRow(row).toIncomeSource())
@@ -21,10 +23,12 @@ class BudgetItemsDao {
   }
 
   Future<List<Expense>> loadExpenses() async {
-    final rows = await _database.customSelect(
-      'SELECT ${BudgetItemRecord.selectExpenseColumns} '
-      'FROM ${DriftSchema.expensesTable} ORDER BY name',
-    ).get();
+    final rows = await _database
+        .customSelect(
+          'SELECT ${BudgetItemRecord.selectExpenseColumns} '
+          'FROM ${DriftSchema.expensesTable} ORDER BY name',
+        )
+        .get();
 
     return rows
         .map((row) => BudgetItemRecord.expenseFromRow(row).toExpense())
@@ -89,10 +93,12 @@ class BudgetItemsDao {
   // ── Bills ──
 
   Future<List<Expense>> loadBills() async {
-    final rows = await _database.customSelect(
-      'SELECT ${BudgetItemRecord.selectColumns} '
-      'FROM ${DriftSchema.billsTable} ORDER BY name',
-    ).get();
+    final rows = await _database
+        .customSelect(
+          'SELECT ${BudgetItemRecord.selectColumns} '
+          'FROM ${DriftSchema.billsTable} ORDER BY name',
+        )
+        .get();
 
     return rows
         .map((row) => BudgetItemRecord.fromRow(row).toExpense())
@@ -104,14 +110,23 @@ class BudgetItemsDao {
 
     return _database.customStatement(
       '''
-      INSERT INTO ${DriftSchema.billsTable} (id, name, amount, month_key)
-      VALUES (?, ?, ?, ?)
+      INSERT INTO ${DriftSchema.billsTable} (id, name, amount, month_key, is_subscription, payment_day)
+      VALUES (?, ?, ?, ?, ?, ?)
       ON CONFLICT(id) DO UPDATE SET
         name = excluded.name,
         amount = excluded.amount,
-        month_key = excluded.month_key
+        month_key = excluded.month_key,
+        is_subscription = excluded.is_subscription,
+        payment_day = excluded.payment_day
       ''',
-      [record.id, record.name, record.amount, record.monthKey],
+      [
+        record.id,
+        record.name,
+        record.amount,
+        record.monthKey,
+        record.isSubscription ? 1 : 0,
+        record.paymentDay ?? 1,
+      ],
     );
   }
 

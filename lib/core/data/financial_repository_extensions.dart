@@ -26,12 +26,12 @@ extension FinancialRepositoryScenarioPlan on FinancialRepository {
   List<Expense> getAllOutgoings() {
     final outgoings = getExpenses().toList();
     outgoings.addAll(getBills());
-    final mortgage = getMortgage();
-    if (mortgage != null) {
+    outgoings.addAll(getSubscriptions());
+    for (final mortgage in getMortgages()) {
       outgoings.add(Expense(
-        id: '_mortgage',
+        id: '_mortgage_${mortgage.id}',
         name: mortgage.name,
-        amount: mortgage.monthlyPayment,
+        amount: mortgage.totalMonthlyPayment,
       ));
     }
     return outgoings;

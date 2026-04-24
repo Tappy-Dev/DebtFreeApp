@@ -35,24 +35,34 @@ class _BudgetItemFormScreenState extends State<BudgetItemFormScreen> {
 
   StudentLoanPlan _selectedStudentLoan = StudentLoanPlan.none;
   bool _trackable = false;
+  int _paymentDay = 1;
+  bool _guidanceExpanded = false;
 
   @override
   void initState() {
     super.initState();
     _controller = BudgetItemFormController(_repository);
+    _paymentDay = _repository.financialMonthStartDay;
     _seedExistingValues();
   }
 
   bool get _isIncome => widget.type == BudgetItemType.income;
   bool get _isBill => widget.type == BudgetItemType.bill;
+  bool get _isSubscription => widget.type == BudgetItemType.subscription;
 
   String get _title {
-    final label = _isIncome ? 'Income' : _isBill ? 'Bill' : 'Expense';
-    return _isEditing ? 'Edit $label' : 'Add $label';
+    if (_isIncome) return _isEditing ? 'Edit Income' : 'Add Income';
+    if (_isBill) return _isEditing ? 'Edit Bill' : 'Add Bill';
+    if (_isSubscription)
+      return _isEditing ? 'Edit Subscription' : 'Add Subscription';
+    return _isEditing ? 'Edit Expense' : 'Add Expense';
   }
 
   String get _nameLabel {
-    return _isIncome ? 'Income name' : _isBill ? 'Bill name' : 'Expense name';
+    if (_isIncome) return 'Income name';
+    if (_isBill) return 'Bill name';
+    if (_isSubscription) return 'Subscription name';
+    return 'Expense name';
   }
 
   String get _amountLabel {
@@ -76,8 +86,13 @@ class _BudgetItemFormScreenState extends State<BudgetItemFormScreen> {
       return null;
     }
 
-    if (_isBill) {
+    if (_isBill || _isSubscription) {
       for (final item in _repository.getBills()) {
+        if (item.id == itemId) {
+          return item.name;
+        }
+      }
+      for (final item in _repository.getSubscriptions()) {
         if (item.id == itemId) {
           return item.name;
         }
@@ -127,6 +142,13 @@ class _BudgetItemFormScreenState extends State<BudgetItemFormScreen> {
             autovalidateMode: AutovalidateMode.onUserInteraction,
             child: ListView(
               children: <Widget>[
+                if (_isIncome) ...<Widget>[
+                  _IncomeGuidanceCard(
+                    expanded: _guidanceExpanded,
+                    onToggle: () => setState(() => _guidanceExpanded = !_guidanceExpanded),
+                  ),
+                  const SizedBox(height: 16),
+                ],
                 TextFormField(
                   controller: _nameController,
                   decoration: InputDecoration(
@@ -155,10 +177,35 @@ class _BudgetItemFormScreenState extends State<BudgetItemFormScreen> {
                     return _controller.validateAmount(value, _amountLabel);
                   },
                 ),
+                if (_isBill || _isSubscription) ...<Widget>[
+                  const SizedBox(height: 16),
+                  DropdownButtonFormField<int>(
+                    initialValue: _paymentDay,
+                    decoration: const InputDecoration(
+                      labelText: 'Payment day',
+                      helperText:
+                          'Day of the month this payment is usually taken',
+                      border: OutlineInputBorder(),
+                    ),
+                    items: List<DropdownMenuItem<int>>.generate(
+                      28,
+                      (int index) => DropdownMenuItem<int>(
+                        value: index + 1,
+                        child: Text('Day ${index + 1}'),
+                      ),
+                    ),
+                    onChanged: (int? value) {
+                      if (value == null) {
+                        return;
+                      }
+                      setState(() => _paymentDay = value);
+                    },
+                  ),
+                ],
                 if (_isIncome) ...<Widget>[
                   const SizedBox(height: 16),
                   DropdownButtonFormField<StudentLoanPlan>(
-                    value: _selectedStudentLoan,
+                    initialValue: _selectedStudentLoan,
                     decoration: const InputDecoration(
                       labelText: 'Student loan plan',
                       border: OutlineInputBorder(),
@@ -211,8 +258,23 @@ class _BudgetItemFormScreenState extends State<BudgetItemFormScreen> {
                       prefixText: '\u00A3',
                     ),
                     onChanged: (_) => setState(() {}),
-                    validator: (String? value) => _controller
-                        .validateNonNegativeMoney(value, 'Pension sacrifice'),
+                    validator: (String? value) {
+                      final fieldError = _controller.validateNonNegativeMoney(
+                        value,
+                        'Pension sacrifice',
+                      );
+                      if (fieldError != null) {
+                        return fieldError;
+                      }
+                      return _controller.validateSalarySacrificeTotal(
+                        annualGross: _amountController.text,
+                        monthlyPensionSacrifice:
+                            _pensionSacrificeController.text,
+                        monthlyCarSacrifice: _carSacrificeController.text,
+                        monthlyOtherSacrifice:
+                            _otherSacrificeController.text,
+                      );
+                    },
                   ),
                   const SizedBox(height: 12),
                   TextFormField(
@@ -225,8 +287,23 @@ class _BudgetItemFormScreenState extends State<BudgetItemFormScreen> {
                       prefixText: '\u00A3',
                     ),
                     onChanged: (_) => setState(() {}),
-                    validator: (String? value) => _controller
-                        .validateNonNegativeMoney(value, 'Car sacrifice'),
+                    validator: (String? value) {
+                      final fieldError = _controller.validateNonNegativeMoney(
+                        value,
+                        'Car sacrifice',
+                      );
+                      if (fieldError != null) {
+                        return fieldError;
+                      }
+                      return _controller.validateSalarySacrificeTotal(
+                        annualGross: _amountController.text,
+                        monthlyPensionSacrifice:
+                            _pensionSacrificeController.text,
+                        monthlyCarSacrifice: _carSacrificeController.text,
+                        monthlyOtherSacrifice:
+                            _otherSacrificeController.text,
+                      );
+                    },
                   ),
                   const SizedBox(height: 12),
                   TextFormField(
@@ -239,8 +316,23 @@ class _BudgetItemFormScreenState extends State<BudgetItemFormScreen> {
                       prefixText: '\u00A3',
                     ),
                     onChanged: (_) => setState(() {}),
-                    validator: (String? value) => _controller
-                        .validateNonNegativeMoney(value, 'Other sacrifice'),
+                    validator: (String? value) {
+                      final fieldError = _controller.validateNonNegativeMoney(
+                        value,
+                        'Other sacrifice',
+                      );
+                      if (fieldError != null) {
+                        return fieldError;
+                      }
+                      return _controller.validateSalarySacrificeTotal(
+                        annualGross: _amountController.text,
+                        monthlyPensionSacrifice:
+                            _pensionSacrificeController.text,
+                        monthlyCarSacrifice: _carSacrificeController.text,
+                        monthlyOtherSacrifice:
+                            _otherSacrificeController.text,
+                      );
+                    },
                   ),
                   const SizedBox(height: 16),
                   TextFormField(
@@ -287,7 +379,8 @@ class _BudgetItemFormScreenState extends State<BudgetItemFormScreen> {
                           'Leave 0 unless these benefits are included for student loan',
                     ),
                     onChanged: (_) => setState(() {}),
-                    validator: (String? value) => _controller.validateNonNegativeMoney(
+                    validator: (String? value) =>
+                        _controller.validateNonNegativeMoney(
                       value,
                       'Student-loanable benefits',
                     ),
@@ -295,7 +388,7 @@ class _BudgetItemFormScreenState extends State<BudgetItemFormScreen> {
                   const SizedBox(height: 16),
                   _buildPayBreakdownCard(currency),
                 ],
-                if (!_isIncome && !_isBill) ...<Widget>[
+                if (!_isIncome && !_isBill && !_isSubscription) ...<Widget>[
                   const SizedBox(height: 8),
                   CheckboxListTile(
                     value: _trackable,
@@ -337,11 +430,11 @@ class _BudgetItemFormScreenState extends State<BudgetItemFormScreen> {
       annualGross: parsed,
       monthlySalarySacrifice: totalMonthlySacrifice,
       monthlyTaxableBenefits:
-        AmountParser.tryParse(_taxableBenefitsController.text) ?? 0,
+          AmountParser.tryParse(_taxableBenefitsController.text) ?? 0,
       monthlyNiableBenefits:
-        AmountParser.tryParse(_niableBenefitsController.text) ?? 0,
+          AmountParser.tryParse(_niableBenefitsController.text) ?? 0,
       monthlyStudentLoanableBenefits:
-        AmountParser.tryParse(_studentLoanableBenefitsController.text) ?? 0,
+          AmountParser.tryParse(_studentLoanableBenefitsController.text) ?? 0,
       studentLoanPlan: _selectedStudentLoan,
     );
 
@@ -412,9 +505,7 @@ class _BudgetItemFormScreenState extends State<BudgetItemFormScreen> {
           Text(label),
           Text(
             currency.format(value),
-            style: bold
-                ? const TextStyle(fontWeight: FontWeight.bold)
-                : null,
+            style: bold ? const TextStyle(fontWeight: FontWeight.bold) : null,
           ),
         ],
       ),
@@ -460,41 +551,103 @@ class _BudgetItemFormScreenState extends State<BudgetItemFormScreen> {
       }
     }
 
-    for (final item in _repository.getBills()) {
+    for (final item in [
+      ..._repository.getBills(),
+      ..._repository.getSubscriptions()
+    ]) {
       if (item.id == itemId) {
         _nameController.text = item.name;
         _amountController.text = item.amount.toStringAsFixed(2);
+        _paymentDay = item.paymentDay ?? _repository.financialMonthStartDay;
         return;
       }
     }
   }
 
-  void _submit() {
+  Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) {
       return;
     }
 
     if (_isIncome) {
-      _controller.saveIncomeItem(
-        itemId: widget.itemId,
-        name: _nameController.text,
+      final sacrificeError = _controller.validateSalarySacrificeTotal(
         annualGross: _amountController.text,
-        studentLoanPlan: _selectedStudentLoan,
         monthlyPensionSacrifice: _pensionSacrificeController.text,
         monthlyCarSacrifice: _carSacrificeController.text,
         monthlyOtherSacrifice: _otherSacrificeController.text,
-        monthlyTaxableBenefits: _taxableBenefitsController.text,
-        monthlyNiableBenefits: _niableBenefitsController.text,
-        monthlyStudentLoanableBenefits: _studentLoanableBenefitsController.text,
       );
+      if (sacrificeError != null) {
+        ScaffoldMessenger.of(context)
+          ..hideCurrentSnackBar()
+          ..showSnackBar(SnackBar(content: Text(sacrificeError)));
+        return;
+      }
+
+      final gross = AmountParser.tryParse(_amountController.text) ?? 0;
+      if (gross > 5000000) {
+        final proceed = await showDialog<bool>(
+              context: context,
+              builder: (ctx) => AlertDialog(
+                title: const Text('Very high salary amount'),
+                content: const Text(
+                  'This annual salary is above £5,000,000. Please confirm this is intentional.',
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(ctx, false),
+                    child: const Text('Cancel'),
+                  ),
+                  FilledButton(
+                    onPressed: () => Navigator.pop(ctx, true),
+                    child: const Text('Continue'),
+                  ),
+                ],
+              ),
+            ) ??
+            false;
+        if (!proceed) {
+          return;
+        }
+      }
+
+      try {
+        _controller.saveIncomeItem(
+          itemId: widget.itemId,
+          name: _nameController.text,
+          annualGross: _amountController.text,
+          studentLoanPlan: _selectedStudentLoan,
+          monthlyPensionSacrifice: _pensionSacrificeController.text,
+          monthlyCarSacrifice: _carSacrificeController.text,
+          monthlyOtherSacrifice: _otherSacrificeController.text,
+          monthlyTaxableBenefits: _taxableBenefitsController.text,
+          monthlyNiableBenefits: _niableBenefitsController.text,
+          monthlyStudentLoanableBenefits:
+              _studentLoanableBenefitsController.text,
+        );
+      } on ArgumentError catch (e) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context)
+          ..hideCurrentSnackBar()
+          ..showSnackBar(SnackBar(content: Text(e.message.toString())));
+        return;
+      }
     } else {
-      _controller.saveItem(
-        type: widget.type,
-        itemId: widget.itemId,
-        name: _nameController.text,
-        amount: _amountController.text,
-        trackable: _trackable,
-      );
+      try {
+        _controller.saveItem(
+          type: widget.type,
+          itemId: widget.itemId,
+          name: _nameController.text,
+          amount: _amountController.text,
+          trackable: _trackable,
+          paymentDay: _isBill || _isSubscription ? _paymentDay : null,
+        );
+      } on ArgumentError catch (e) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context)
+          ..hideCurrentSnackBar()
+          ..showSnackBar(SnackBar(content: Text(e.message.toString())));
+        return;
+      }
     }
 
     if (!mounted) {
@@ -507,5 +660,150 @@ class _BudgetItemFormScreenState extends State<BudgetItemFormScreen> {
     }
 
     context.go('/budget');
+  }
+}
+
+class _IncomeGuidanceCard extends StatelessWidget {
+  const _IncomeGuidanceCard({
+    required this.expanded,
+    required this.onToggle,
+  });
+
+  final bool expanded;
+  final VoidCallback onToggle;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: cs.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: cs.outlineVariant),
+      ),
+      child: Column(
+        children: [
+          InkWell(
+            borderRadius: BorderRadius.circular(12),
+            onTap: onToggle,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+              child: Row(
+                children: [
+                  Icon(Icons.help_outline_rounded, size: 16, color: cs.primary),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Where do I find this information?',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: cs.primary,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                  Icon(
+                    expanded ? Icons.expand_less_rounded : Icons.expand_more_rounded,
+                    size: 18,
+                    color: cs.onSurfaceVariant,
+                  ),
+                ],
+              ),
+            ),
+          ),
+          if (expanded)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Divider(color: cs.outlineVariant, height: 1),
+                  const SizedBox(height: 12),
+                  _GuidanceRow(
+                    label: 'Annual gross salary',
+                    detail: 'Your employment contract, P60, or payslip — look for "Total pay" or "Gross pay" before tax.',
+                    theme: theme,
+                    cs: cs,
+                  ),
+                  const SizedBox(height: 10),
+                  _GuidanceRow(
+                    label: 'Student loan plan',
+                    detail: 'Check your payslip for a "Student Loan" deduction, or your original loan agreement / HMRC online account.',
+                    theme: theme,
+                    cs: cs,
+                  ),
+                  const SizedBox(height: 10),
+                  _GuidanceRow(
+                    label: 'Pension / Car / Other sacrifice',
+                    detail: 'Your payslip — listed as pre-tax deductions before "Gross for tax" is calculated. Your HR portal will also show scheme details.',
+                    theme: theme,
+                    cs: cs,
+                  ),
+                  const SizedBox(height: 10),
+                  _GuidanceRow(
+                    label: 'Taxable benefits',
+                    detail: 'Your P11D (issued by your employer after each tax year) or payslip if benefits are payrolled. Includes private medical, company car BIK, fuel benefit.',
+                    theme: theme,
+                    cs: cs,
+                  ),
+                  const SizedBox(height: 10),
+                  _GuidanceRow(
+                    label: 'NI-able / Student-loanable benefits',
+                    detail: 'Leave 0 if unsure — most employees can ignore these. Check your payslip or ask your payroll team if you have complex benefit arrangements.',
+                    theme: theme,
+                    cs: cs,
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    'Tip: You can add multiple income sources — salary, freelance, rental income, etc. — separately.',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: cs.onSurfaceVariant,
+                      fontStyle: FontStyle.italic,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _GuidanceRow extends StatelessWidget {
+  const _GuidanceRow({
+    required this.label,
+    required this.detail,
+    required this.theme,
+    required this.cs,
+  });
+
+  final String label;
+  final String detail;
+  final ThemeData theme;
+  final ColorScheme cs;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: theme.textTheme.bodySmall?.copyWith(
+            fontWeight: FontWeight.w600,
+            color: cs.onSurface,
+          ),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          detail,
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: cs.onSurfaceVariant,
+          ),
+        ),
+      ],
+    );
   }
 }

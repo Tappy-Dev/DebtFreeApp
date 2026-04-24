@@ -21,6 +21,7 @@ class MortgageScreen extends StatefulWidget {
 
 class _MortgageScreenState extends State<MortgageScreen> {
   final _repository = SessionFinancialRepository.instance;
+  String? _selectedMortgageId;
   double _extraOverpayment = 0;
   MortgageDetail? _detail;
   final _currencyFormat = NumberFormat.currency(symbol: '£', decimalDigits: 2);
@@ -29,7 +30,9 @@ class _MortgageScreenState extends State<MortgageScreen> {
   void initState() {
     super.initState();
     _repository.addListener(_onRepositoryChange);
-    _extraOverpayment = _repository.getMortgage()?.overpayment ?? 0;
+    final mortgages = _repository.getMortgages();
+    _selectedMortgageId = mortgages.isEmpty ? null : mortgages.first.id;
+    _extraOverpayment = _selectedMortgage?.overpayment ?? 0;
     _recalculate();
   }
 
@@ -41,12 +44,45 @@ class _MortgageScreenState extends State<MortgageScreen> {
 
   void _onRepositoryChange() {
     if (!mounted) return;
+    _syncSelectedMortgage();
     _recalculate();
     setState(() {});
   }
 
+  Mortgage? get _selectedMortgage {
+    final mortgages = _repository.getMortgages();
+    if (_selectedMortgageId == null) {
+      return mortgages.isEmpty ? null : mortgages.first;
+    }
+    for (final mortgage in mortgages) {
+      if (mortgage.id == _selectedMortgageId) {
+        return mortgage;
+      }
+    }
+    return mortgages.isEmpty ? null : mortgages.first;
+  }
+
+  void _syncSelectedMortgage() {
+    final mortgages = _repository.getMortgages();
+    if (mortgages.isEmpty) {
+      _selectedMortgageId = null;
+      _extraOverpayment = 0;
+      return;
+    }
+    final stillExists = mortgages.any((m) => m.id == _selectedMortgageId);
+    if (!stillExists) {
+      _selectedMortgageId = mortgages.first.id;
+      _extraOverpayment = mortgages.first.overpayment;
+      return;
+    }
+    final selected = _selectedMortgage;
+    if (selected != null) {
+      _extraOverpayment = selected.overpayment;
+    }
+  }
+
   void _recalculate() {
-    final mortgage = _repository.getMortgage();
+    final mortgage = _selectedMortgage;
     if (mortgage == null) {
       _detail = null;
       return;
@@ -68,8 +104,8 @@ class _MortgageScreenState extends State<MortgageScreen> {
     DateTime referenceDate,
   ) {
     final now = DateTime.now();
-    final monthOffset =
-        (referenceDate.year - now.year) * 12 + (referenceDate.month - now.month);
+    final monthOffset = (referenceDate.year - now.year) * 12 +
+        (referenceDate.month - now.month);
     if (monthOffset <= 0) {
       return mortgage;
     }
@@ -84,7 +120,8 @@ class _MortgageScreenState extends State<MortgageScreen> {
 
     final index = math.min(monthOffset - 1, result.monthlyBreakdown.length - 1);
     final month = result.monthlyBreakdown[index];
-    final remainingTerm = math.max(0, mortgage.remainingTermMonths - monthOffset);
+    final remainingTerm =
+        math.max(0, mortgage.remainingTermMonths - monthOffset);
 
     return mortgage.copyWith(
       balance: month.balanceRemaining,
@@ -93,7 +130,7 @@ class _MortgageScreenState extends State<MortgageScreen> {
   }
 
   void _applyOverpayment() {
-    final mortgage = _repository.getMortgage();
+    final mortgage = _selectedMortgage;
     if (mortgage == null) return;
     _repository.saveMortgage(mortgage.copyWith(overpayment: _extraOverpayment));
     ScaffoldMessenger.of(context).showSnackBar(
@@ -110,25 +147,32 @@ class _MortgageScreenState extends State<MortgageScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final mortgage = _repository.getMortgage();
+    final mortgages = _repository.getMortgages();
     final referenceDate = _repository.effectiveNow;
+    final selectedMortgage = _selectedMortgage;
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('Mortgage'),
-        actions: _repository.developerModeEnabled
-            ? [
-                PreviewMonthBadge(
-                  referenceDate: referenceDate,
-                  monthOffset: _repository.developerMonthOffset,
-                ),
-              ]
-            : null,
+        actions: [
+          IconButton(
+            onPressed: () => _showAddMortgageDialog(context),
+            icon: const Icon(Icons.add),
+            tooltip: 'Add mortgage',
+          ),
+          if (_repository.developerModeEnabled)
+            PreviewMonthBadge(
+              referenceDate: referenceDate,
+              monthOffset: _repository.developerMonthOffset,
+            ),
+        ],
       ),
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(20),
-          child: mortgage == null ? _buildEmptyState(context) : _buildDetail(context),
+          child: mortgages.isEmpty
+              ? _buildEmptyState(context)
+              : _buildDetail(context, mortgages, selectedMortgage),
         ),
       ),
     );
@@ -143,11 +187,10 @@ class _MortgageScreenState extends State<MortgageScreen> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: <Widget>[
-              Icon(Icons.home_outlined, size: 48,
-                  color: theme.colorScheme.onSurfaceVariant),
+              Icon(Icons.home_outlined,
+                  size: 48, color: theme.colorScheme.onSurfaceVariant),
               const SizedBox(height: 16),
-              Text('No mortgage added yet',
-                  style: theme.textTheme.titleMedium),
+              Text('No mortgage added yet', style: theme.textTheme.titleMedium),
               const SizedBox(height: 8),
               const Text('Add your mortgage details to track overpayments.'),
               const SizedBox(height: 16),
@@ -163,12 +206,45 @@ class _MortgageScreenState extends State<MortgageScreen> {
     );
   }
 
-  Widget _buildDetail(BuildContext context) {
+  Widget _buildDetail(
+    BuildContext context,
+    List<Mortgage> mortgages,
+    Mortgage? selectedMortgage,
+  ) {
     final theme = Theme.of(context);
+    if (selectedMortgage == null || _detail == null) {
+      return _buildEmptyState(context);
+    }
     final detail = _detail!;
 
     return ListView(
       children: <Widget>[
+        if (mortgages.length > 1) ...[
+          DropdownButtonFormField<String>(
+            value: selectedMortgage.id,
+            decoration: const InputDecoration(
+              labelText: 'Selected mortgage',
+              border: OutlineInputBorder(),
+            ),
+            items: mortgages
+                .map(
+                  (m) => DropdownMenuItem<String>(
+                    value: m.id,
+                    child: Text(m.name),
+                  ),
+                )
+                .toList(growable: false),
+            onChanged: (value) {
+              if (value == null) return;
+              setState(() {
+                _selectedMortgageId = value;
+                _extraOverpayment = _selectedMortgage?.overpayment ?? 0;
+                _recalculate();
+              });
+            },
+          ),
+          const SizedBox(height: 12),
+        ],
         // ── Overview Card ──
         Card(
           clipBehavior: Clip.antiAlias,
@@ -188,12 +264,13 @@ class _MortgageScreenState extends State<MortgageScreen> {
                     ),
                     IconButton(
                       icon: const Icon(Icons.edit_outlined, size: 20),
-                      onPressed: () => _showAddMortgageDialog(context),
+                      onPressed: () => _showAddMortgageDialog(context,
+                          existing: selectedMortgage),
                       tooltip: 'Edit',
                     ),
                     IconButton(
                       icon: const Icon(Icons.delete_outline, size: 20),
-                      onPressed: _confirmDelete,
+                      onPressed: () => _confirmDelete(selectedMortgage),
                       tooltip: 'Delete',
                     ),
                   ],
@@ -391,8 +468,7 @@ class _MortgageScreenState extends State<MortgageScreen> {
                             Expanded(
                               child: _SavingsChip(
                                 label: 'Months Saved',
-                                value:
-                                    '${detail.overpaymentMonthsSaved}',
+                                value: '${detail.overpaymentMonthsSaved}',
                                 icon: Icons.calendar_today_rounded,
                               ),
                             ),
@@ -476,8 +552,10 @@ class _MortgageScreenState extends State<MortgageScreen> {
     );
   }
 
-  void _showAddMortgageDialog(BuildContext context) {
-    final existing = _repository.getMortgage();
+  void _showAddMortgageDialog(
+    BuildContext context, {
+    Mortgage? existing,
+  }) {
     final nameController = TextEditingController(
       text: existing?.name ?? 'Mortgage',
     );
@@ -493,100 +571,276 @@ class _MortgageScreenState extends State<MortgageScreen> {
     final termController = TextEditingController(
       text: existing != null ? existing.remainingTermMonths.toString() : '',
     );
+    int selectedPaymentDay =
+        existing?.paymentDay ?? _repository.financialMonthStartDay;
 
     showDialog<void>(
       context: context,
       builder: (BuildContext dialogContext) {
-        return AlertDialog(
-          title: Text(existing != null ? 'Edit Mortgage' : 'Add Mortgage'),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: <Widget>[
-                TextField(
-                  controller: nameController,
-                  decoration: const InputDecoration(labelText: 'Name'),
+        return StatefulBuilder(
+          builder: (BuildContext context,
+              void Function(void Function()) setDialogState) {
+            return AlertDialog(
+              title: Text(existing != null ? 'Edit Mortgage' : 'Add Mortgage'),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: <Widget>[
+                    TextField(
+                      controller: nameController,
+                      decoration: const InputDecoration(labelText: 'Name'),
+                    ),
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: balanceController,
+                      keyboardType:
+                          const TextInputType.numberWithOptions(decimal: true),
+                      decoration: const InputDecoration(
+                        labelText: 'Outstanding balance',
+                        prefixText: '£',
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: rateController,
+                      keyboardType:
+                          const TextInputType.numberWithOptions(decimal: true),
+                      decoration: const InputDecoration(
+                        labelText: 'Annual interest rate (%)',
+                        suffixText: '%',
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: paymentController,
+                      keyboardType:
+                          const TextInputType.numberWithOptions(decimal: true),
+                      decoration: const InputDecoration(
+                        labelText: 'Monthly payment',
+                        prefixText: '£',
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    DropdownButtonFormField<int>(
+                      initialValue: selectedPaymentDay,
+                      decoration: const InputDecoration(
+                        labelText: 'Payment day',
+                        helperText:
+                            'Day of the month your mortgage payment is taken',
+                        border: OutlineInputBorder(),
+                      ),
+                      items: List<DropdownMenuItem<int>>.generate(
+                        28,
+                        (int index) => DropdownMenuItem<int>(
+                          value: index + 1,
+                          child: Text('Day ${index + 1}'),
+                        ),
+                      ),
+                      onChanged: (int? value) {
+                        if (value == null) {
+                          return;
+                        }
+                        setDialogState(() {
+                          selectedPaymentDay = value;
+                        });
+                      },
+                    ),
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: termController,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(
+                        labelText: 'Remaining term (months)',
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 8),
-                TextField(
-                  controller: balanceController,
-                  keyboardType:
-                      const TextInputType.numberWithOptions(decimal: true),
-                  decoration: const InputDecoration(
-                    labelText: 'Outstanding balance',
-                    prefixText: '£',
-                  ),
+              ),
+              actions: <Widget>[
+                TextButton(
+                  onPressed: () => Navigator.pop(dialogContext),
+                  child: const Text('Cancel'),
                 ),
-                const SizedBox(height: 8),
-                TextField(
-                  controller: rateController,
-                  keyboardType:
-                      const TextInputType.numberWithOptions(decimal: true),
-                  decoration: const InputDecoration(
-                    labelText: 'Annual interest rate (%)',
-                    suffixText: '%',
-                  ),
-                ),
-                const SizedBox(height: 8),
-                TextField(
-                  controller: paymentController,
-                  keyboardType:
-                      const TextInputType.numberWithOptions(decimal: true),
-                  decoration: const InputDecoration(
-                    labelText: 'Monthly payment',
-                    prefixText: '£',
-                  ),
-                ),
-                const SizedBox(height: 8),
-                TextField(
-                  controller: termController,
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(
-                    labelText: 'Remaining term (months)',
-                  ),
+                FilledButton(
+                  onPressed: () async {
+                    final name = nameController.text.trim();
+                    final balance =
+                        AmountParser.tryParse(balanceController.text);
+                    final rate = double.tryParse(rateController.text.trim());
+                    final payment =
+                        AmountParser.tryParse(paymentController.text);
+                    final term = int.tryParse(termController.text.trim());
+
+                    final messenger = ScaffoldMessenger.of(this.context);
+                    if (name.isEmpty) {
+                      messenger
+                        ..hideCurrentSnackBar()
+                        ..showSnackBar(
+                          const SnackBar(
+                            content: Text('Mortgage name is required.'),
+                          ),
+                        );
+                      return;
+                    }
+                    if (balance == null || balance <= 0) {
+                      messenger
+                        ..hideCurrentSnackBar()
+                        ..showSnackBar(
+                          const SnackBar(
+                            content: Text(
+                                'Outstanding balance must be greater than 0.'),
+                          ),
+                        );
+                      return;
+                    }
+                    if (!AmountParser.hasMaxDecimalPlaces(
+                          balanceController.text,
+                          2,
+                        ) ||
+                        !AmountParser.hasMaxDecimalPlaces(
+                          rateController.text,
+                          2,
+                        ) ||
+                        !AmountParser.hasMaxDecimalPlaces(
+                          paymentController.text,
+                          2,
+                        )) {
+                      messenger
+                        ..hideCurrentSnackBar()
+                        ..showSnackBar(
+                          const SnackBar(
+                            content: Text(
+                                'Balance, APR and payment can have at most 2 decimal places.'),
+                          ),
+                        );
+                      return;
+                    }
+                    if (rate == null || rate < 0 || rate > 100) {
+                      messenger
+                        ..hideCurrentSnackBar()
+                        ..showSnackBar(
+                          const SnackBar(
+                            content: Text(
+                                'Annual interest rate must be between 0 and 100.'),
+                          ),
+                        );
+                      return;
+                    }
+                    if (payment == null || payment <= 0) {
+                      messenger
+                        ..hideCurrentSnackBar()
+                        ..showSnackBar(
+                          const SnackBar(
+                            content:
+                                Text('Monthly payment must be greater than 0.'),
+                          ),
+                        );
+                      return;
+                    }
+                    if (term == null || term <= 0) {
+                      messenger
+                        ..hideCurrentSnackBar()
+                        ..showSnackBar(
+                          const SnackBar(
+                            content: Text(
+                                'Remaining term (months) must be greater than 0.'),
+                          ),
+                        );
+                      return;
+                    }
+
+                    final monthlyInterestOnly = balance * (rate / 100) / 12;
+                    if (rate > 0 && payment <= monthlyInterestOnly) {
+                      messenger
+                        ..hideCurrentSnackBar()
+                        ..showSnackBar(
+                          const SnackBar(
+                            content: Text(
+                              'Monthly payment must be higher than monthly interest, or the balance will not reduce.',
+                            ),
+                          ),
+                        );
+                      return;
+                    }
+
+                    if (balance > 5000000 || payment > 50000) {
+                      final proceedHighValue = await showDialog<bool>(
+                            context: dialogContext,
+                            builder: (ctx) => AlertDialog(
+                              title: const Text('Very high mortgage values'),
+                              content: const Text(
+                                'These mortgage values are unusually high. Please confirm they are intentional.',
+                              ),
+                              actions: [
+                                TextButton(
+                                  onPressed: () => Navigator.pop(ctx, false),
+                                  child: const Text('Cancel'),
+                                ),
+                                FilledButton(
+                                  onPressed: () => Navigator.pop(ctx, true),
+                                  child: const Text('Continue'),
+                                ),
+                              ],
+                            ),
+                          ) ??
+                          false;
+                      if (!proceedHighValue) {
+                        return;
+                      }
+                    }
+
+                    final salaryDay = _repository.financialMonthStartDay;
+                    if ((selectedPaymentDay - salaryDay).abs() >= 10) {
+                      final proceedDayGap = await showDialog<bool>(
+                            context: dialogContext,
+                            builder: (ctx) => AlertDialog(
+                              title: const Text('Payment day far from salary day'),
+                              content: Text(
+                                'Your mortgage payment day (day $selectedPaymentDay) is quite far from your financial month start day (day $salaryDay).\n\nContinue anyway?',
+                              ),
+                              actions: [
+                                TextButton(
+                                  onPressed: () => Navigator.pop(ctx, false),
+                                  child: const Text('Adjust day'),
+                                ),
+                                FilledButton(
+                                  onPressed: () => Navigator.pop(ctx, true),
+                                  child: const Text('Continue'),
+                                ),
+                              ],
+                            ),
+                          ) ??
+                          false;
+                      if (!proceedDayGap) {
+                        return;
+                      }
+                    }
+
+                    final mortgageId = existing?.id ??
+                        'mortgage-${DateTime.now().millisecondsSinceEpoch}';
+                    _repository.saveMortgage(Mortgage(
+                      id: mortgageId,
+                      name: name,
+                      balance: balance,
+                      annualRate: rate,
+                      monthlyPayment: payment,
+                      remainingTermMonths: term,
+                      paymentDay: selectedPaymentDay,
+                    ));
+                    _selectedMortgageId = mortgageId;
+                    Navigator.pop(dialogContext);
+                  },
+                  child: Text(existing != null ? 'Update' : 'Add'),
                 ),
               ],
-            ),
-          ),
-          actions: <Widget>[
-            TextButton(
-              onPressed: () => Navigator.pop(dialogContext),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              onPressed: () {
-                final name = nameController.text.trim();
-                final balance = AmountParser.tryParse(balanceController.text);
-                final rate = double.tryParse(rateController.text.trim());
-                final payment = AmountParser.tryParse(paymentController.text);
-                final term = int.tryParse(termController.text.trim());
-                if (name.isEmpty ||
-                    balance == null ||
-                    rate == null ||
-                    payment == null ||
-                    term == null) {
-                  return;
-                }
-
-                _repository.saveMortgage(Mortgage(
-                  id: existing?.id ?? 'mortgage',
-                  name: name,
-                  balance: balance,
-                  annualRate: rate,
-                  monthlyPayment: payment,
-                  remainingTermMonths: term,
-                ));
-                Navigator.pop(dialogContext);
-              },
-              child: Text(existing != null ? 'Update' : 'Add'),
-            ),
-          ],
+            );
+          },
         );
       },
     );
   }
 
-  Future<void> _confirmDelete() async {
+  Future<void> _confirmDelete(Mortgage mortgage) async {
     final shouldDelete = await showDialog<bool>(
       context: context,
       builder: (BuildContext context) {
@@ -607,7 +861,7 @@ class _MortgageScreenState extends State<MortgageScreen> {
       },
     );
     if (shouldDelete == true) {
-      _repository.deleteMortgage();
+      _repository.deleteMortgageById(mortgage.id);
     }
   }
 
@@ -653,8 +907,8 @@ class _MortgageStatChip extends StatelessWidget {
                   ?.copyWith(fontWeight: FontWeight.bold, color: color)),
           const SizedBox(height: 2),
           Text(label,
-              style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant)),
+              style: theme.textTheme.bodySmall
+                  ?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
         ],
       ),
     );

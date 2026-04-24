@@ -18,6 +18,8 @@ class BudgetItemRecord {
     this.monthlyStudentLoanableBenefits = 0,
     this.monthKey = '',
     this.trackable = false,
+    this.isSubscription = false,
+    this.paymentDay,
   });
 
   factory BudgetItemRecord.fromIncomeSource(IncomeSource incomeSource) {
@@ -32,7 +34,8 @@ class BudgetItemRecord {
       monthlyOtherSacrifice: incomeSource.monthlyOtherSacrifice,
       monthlyTaxableBenefits: incomeSource.monthlyTaxableBenefits,
       monthlyNiableBenefits: incomeSource.monthlyNiableBenefits,
-      monthlyStudentLoanableBenefits: incomeSource.monthlyStudentLoanableBenefits,
+      monthlyStudentLoanableBenefits:
+          incomeSource.monthlyStudentLoanableBenefits,
       monthKey: incomeSource.monthKey,
     );
   }
@@ -44,6 +47,8 @@ class BudgetItemRecord {
       amount: expense.amount,
       monthKey: expense.monthKey,
       trackable: expense.trackable,
+      isSubscription: expense.isSubscription,
+      paymentDay: expense.paymentDay,
     );
   }
 
@@ -53,6 +58,9 @@ class BudgetItemRecord {
       name: row.read<String>(nameColumn),
       amount: row.read<double>(amountColumn),
       monthKey: row.read<String>(monthKeyColumn),
+      trackable: (row.data[isSubscriptionColumn] as int?) == 1 ? false : false,
+      isSubscription: (row.data[isSubscriptionColumn] as int? ?? 0) == 1,
+      paymentDay: row.read<int>(paymentDayColumn),
     );
   }
 
@@ -73,19 +81,20 @@ class BudgetItemRecord {
       amount: row.read<double>(amountColumn),
       annualGross: row.read<double>(annualGrossColumn),
       studentLoanPlan: row.read<String>(studentLoanPlanColumn),
-        monthlyPensionSacrifice:
+      monthlyPensionSacrifice:
           (row.data[monthlyPensionSacrificeColumn] as num?)?.toDouble() ?? 0,
-        monthlyCarSacrifice:
+      monthlyCarSacrifice:
           (row.data[monthlyCarSacrificeColumn] as num?)?.toDouble() ?? 0,
-        monthlyOtherSacrifice:
+      monthlyOtherSacrifice:
           (row.data[monthlyOtherSacrificeColumn] as num?)?.toDouble() ?? 0,
-        monthlyTaxableBenefits:
+      monthlyTaxableBenefits:
           (row.data[monthlyTaxableBenefitsColumn] as num?)?.toDouble() ?? 0,
-        monthlyNiableBenefits:
+      monthlyNiableBenefits:
           (row.data[monthlyNiableBenefitsColumn] as num?)?.toDouble() ?? 0,
-        monthlyStudentLoanableBenefits:
-          (row.data[monthlyStudentLoanableBenefitsColumn] as num?)?.toDouble() ??
-            0,
+      monthlyStudentLoanableBenefits:
+          (row.data[monthlyStudentLoanableBenefitsColumn] as num?)
+                  ?.toDouble() ??
+              0,
       monthKey: row.read<String>(monthKeyColumn),
     );
   }
@@ -95,21 +104,20 @@ class BudgetItemRecord {
   static const String amountColumn = 'amount';
   static const String annualGrossColumn = 'annual_gross';
   static const String studentLoanPlanColumn = 'student_loan_plan';
-    static const String monthlyPensionSacrificeColumn =
+  static const String monthlyPensionSacrificeColumn =
       'monthly_pension_sacrifice';
-    static const String monthlyCarSacrificeColumn = 'monthly_car_sacrifice';
-    static const String monthlyOtherSacrificeColumn =
-      'monthly_other_sacrifice';
-    static const String monthlyTaxableBenefitsColumn =
-      'monthly_taxable_benefits';
-    static const String monthlyNiableBenefitsColumn =
-      'monthly_niable_benefits';
-    static const String monthlyStudentLoanableBenefitsColumn =
+  static const String monthlyCarSacrificeColumn = 'monthly_car_sacrifice';
+  static const String monthlyOtherSacrificeColumn = 'monthly_other_sacrifice';
+  static const String monthlyTaxableBenefitsColumn = 'monthly_taxable_benefits';
+  static const String monthlyNiableBenefitsColumn = 'monthly_niable_benefits';
+  static const String monthlyStudentLoanableBenefitsColumn =
       'monthly_student_loanable_benefits';
   static const String monthKeyColumn = 'month_key';
+  static const String isSubscriptionColumn = 'is_subscription';
+  static const String paymentDayColumn = 'payment_day';
 
   static const String selectColumns =
-      '$idColumn, $nameColumn, $amountColumn, $monthKeyColumn';
+      '$idColumn, $nameColumn, $amountColumn, $monthKeyColumn, $isSubscriptionColumn, $paymentDayColumn';
   static const String selectExpenseColumns =
       '$idColumn, $nameColumn, $amountColumn, $monthKeyColumn, is_trackable';
   static const String selectIncomeColumns =
@@ -142,6 +150,8 @@ class BudgetItemRecord {
   final double monthlyStudentLoanableBenefits;
   final String monthKey;
   final bool trackable;
+  final bool isSubscription;
+  final int? paymentDay;
 
   IncomeSource toIncomeSource() {
     // If annualGross is set use it; otherwise fall back to legacy monthly amount
@@ -172,6 +182,8 @@ class BudgetItemRecord {
       amount: amount,
       monthKey: monthKey,
       trackable: trackable,
+      isSubscription: isSubscription,
+      paymentDay: paymentDay,
     );
   }
 

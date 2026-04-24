@@ -1,4 +1,5 @@
 import 'package:debt_free_app/core/data/session_financial_repository.dart';
+import 'package:debt_free_app/core/utils/amount_parser.dart';
 import 'package:debt_free_app/features/debts/application/debt_form_controller.dart';
 import 'package:debt_free_app/features/simulation/models/debt_account.dart';
 import 'package:flutter/material.dart';
@@ -25,13 +26,13 @@ class _DebtFormScreenState extends State<DebtFormScreen> {
   final _minimumPaymentController = TextEditingController();
   final _percentageController = TextEditingController(text: '1.0');
   final _floorController = TextEditingController(text: '25');
+  final _loanLengthController = TextEditingController();
   final _controller = DebtFormController(SessionFinancialRepository.instance);
 
   DebtType _selectedDebtType = DebtType.creditCard;
-  MinPaymentType _selectedPaymentType =
-      MinPaymentType.interestPlusPercentage;
+  MinPaymentType _selectedPaymentType = MinPaymentType.interestPlusPercentage;
   DateTime _startDate = DateTime(DateTime.now().year, DateTime.now().month);
-  DateTime? _loanEndDate;
+  int _paymentDay = SessionFinancialRepository.instance.financialMonthStartDay;
   final _dateFormat = DateFormat('MMMM yyyy');
 
   DebtAccount? get _existingDebt {
@@ -68,7 +69,15 @@ class _DebtFormScreenState extends State<DebtFormScreen> {
     _selectedPaymentType = existingDebt.minPaymentRule.type;
     _startDate = existingDebt.startDate ??
         DateTime(DateTime.now().year, DateTime.now().month);
-    _loanEndDate = existingDebt.loanEndDate;
+    _paymentDay = existingDebt.paymentDay;
+    if (existingDebt.loanEndDate != null && existingDebt.startDate != null) {
+      final months =
+          (existingDebt.loanEndDate!.year - existingDebt.startDate!.year) * 12 +
+              existingDebt.loanEndDate!.month -
+              existingDebt.startDate!.month;
+      _loanLengthController.text =
+          (months / 12).round().clamp(1, 99).toString();
+    }
     _percentageController.text =
         existingDebt.minPaymentRule.percentage.toStringAsFixed(1);
     _floorController.text =
@@ -83,22 +92,24 @@ class _DebtFormScreenState extends State<DebtFormScreen> {
     _minimumPaymentController.dispose();
     _percentageController.dispose();
     _floorController.dispose();
+    _loanLengthController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     final isLoan = _selectedDebtType == DebtType.loan;
+    final isOther = _selectedDebtType == DebtType.other;
     final showRuleFields = _selectedPaymentType != MinPaymentType.fixed;
-    final loanTermError = isLoan
-        ? _controller.validateLoanTerm(_startDate, _loanEndDate)
-        : null;
+    final loanEndDate = isLoan ? _computeLoanEndDate() : null;
+    final loanTermError =
+        isLoan ? _controller.validateLoanTerm(_startDate, loanEndDate) : null;
     final estimatedLoanPayment = isLoan
         ? _controller.estimateLoanPayment(
             balance: _balanceController.text,
             apr: _aprController.text,
             startDate: _startDate,
-            endDate: _loanEndDate,
+            endDate: loanEndDate,
           )
         : null;
 
@@ -134,7 +145,6 @@ class _DebtFormScreenState extends State<DebtFormScreen> {
                       _selectedDebtType = selected.first;
                       if (_selectedDebtType == DebtType.loan) {
                         _selectedPaymentType = MinPaymentType.fixed;
-                        _loanEndDate ??= _startDate;
                       }
                     });
                   },
@@ -164,19 +174,24 @@ class _DebtFormScreenState extends State<DebtFormScreen> {
                   },
                 ),
                 const SizedBox(height: 16),
-                TextFormField(
-                  controller: _aprController,
-                  keyboardType:
-                      const TextInputType.numberWithOptions(decimal: true),
-                  decoration: const InputDecoration(
-                    labelText: 'APR (%)',
-                    border: OutlineInputBorder(),
+                if (!isOther) ...[
+                  TextFormField(
+                    controller: _aprController,
+                    keyboardType:
+                        const TextInputType.numberWithOptions(decimal: true),
+                    decoration: const InputDecoration(
+                      labelText: 'APR (%)',
+                      border: OutlineInputBorder(),
+                    ),
+                    validator: (String? value) {
+                      return _controller.validateAprForDebtType(
+                        value,
+                        _selectedDebtType,
+                      );
+                    },
                   ),
-                  validator: (String? value) {
-                    return _controller.validateApr(value);
-                  },
-                ),
-                const SizedBox(height: 16),
+                  const SizedBox(height: 16),
+                ],
                 // ── Start date picker ──
                 InkWell(
                   onTap: _pickStartDate,
@@ -199,7 +214,7 @@ class _DebtFormScreenState extends State<DebtFormScreen> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text('Balance as of',
+                              Text(isLoan ? 'Loan start date' : 'Balance as of',
                                   style: Theme.of(context)
                                       .textTheme
                                       .labelSmall
@@ -211,85 +226,61 @@ class _DebtFormScreenState extends State<DebtFormScreen> {
                                   style: Theme.of(context)
                                       .textTheme
                                       .bodyMedium
-                                      ?.copyWith(
-                                          fontWeight: FontWeight.w600)),
+                                      ?.copyWith(fontWeight: FontWeight.w600)),
                             ],
                           ),
                         ),
                         Icon(Icons.chevron_right,
                             size: 20,
-                            color: Theme.of(context)
-                                .colorScheme
-                                .onSurfaceVariant),
+                            color:
+                                Theme.of(context).colorScheme.onSurfaceVariant),
                       ],
                     ),
                   ),
                 ),
+                const SizedBox(height: 16),
+                DropdownButtonFormField<int>(
+                  initialValue: _paymentDay,
+                  decoration: const InputDecoration(
+                    labelText: 'Payment day',
+                    helperText:
+                        'Day of the month this debt payment is normally taken',
+                    border: OutlineInputBorder(),
+                  ),
+                  items: List<DropdownMenuItem<int>>.generate(
+                    28,
+                    (int index) => DropdownMenuItem<int>(
+                      value: index + 1,
+                      child: Text('Day ${index + 1}'),
+                    ),
+                  ),
+                  onChanged: (int? value) {
+                    if (value == null) {
+                      return;
+                    }
+                    setState(() {
+                      _paymentDay = value;
+                    });
+                  },
+                ),
                 if (isLoan) ...[
                   const SizedBox(height: 16),
-                  InkWell(
-                    onTap: _pickLoanEndDate,
-                    borderRadius: BorderRadius.circular(8),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 12,
-                      ),
-                      decoration: BoxDecoration(
-                        border: Border.all(
-                          color: loanTermError == null
-                              ? Theme.of(context).colorScheme.outlineVariant
-                              : Theme.of(context).colorScheme.error,
-                        ),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Row(
-                        children: [
-                          Icon(
-                            Icons.event_available_outlined,
-                            size: 20,
-                            color: Theme.of(context).colorScheme.primary,
-                          ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'Loan end date',
-                                  style: Theme.of(context)
-                                      .textTheme
-                                      .labelSmall
-                                      ?.copyWith(
-                                        color: Theme.of(context)
-                                            .colorScheme
-                                            .onSurfaceVariant,
-                                      ),
-                                ),
-                                Text(
-                                  _loanEndDate == null
-                                      ? 'Select end month'
-                                      : _dateFormat.format(_loanEndDate!),
-                                  style: Theme.of(context)
-                                      .textTheme
-                                      .bodyMedium
-                                      ?.copyWith(
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          Icon(
-                            Icons.chevron_right,
-                            size: 20,
-                            color: Theme.of(context)
-                                .colorScheme
-                                .onSurfaceVariant,
-                          ),
-                        ],
-                      ),
+                  TextFormField(
+                    controller: _loanLengthController,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(
+                      labelText: 'Loan length',
+                      helperText: 'e.g. 5 for a 5-year loan',
+                      border: OutlineInputBorder(),
+                      suffixText: 'years',
                     ),
+                    onChanged: (_) => setState(() {}),
+                    validator: (value) {
+                      final v = int.tryParse(value?.trim() ?? '');
+                      if (v == null || v <= 0)
+                        return 'Enter a valid loan length in years';
+                      return null;
+                    },
                   ),
                   if (loanTermError != null) ...[
                     const SizedBox(height: 8),
@@ -330,14 +321,12 @@ class _DebtFormScreenState extends State<DebtFormScreen> {
                         const SizedBox(height: 4),
                         Text(
                           'This is calculated from the balance, APR, and remaining loan term.',
-                          style: Theme.of(context)
-                              .textTheme
-                              .bodySmall
-                              ?.copyWith(
-                                color: Theme.of(context)
-                                    .colorScheme
-                                    .onSurfaceVariant,
-                              ),
+                          style:
+                              Theme.of(context).textTheme.bodySmall?.copyWith(
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .onSurfaceVariant,
+                                  ),
                         ),
                       ],
                     ),
@@ -346,83 +335,86 @@ class _DebtFormScreenState extends State<DebtFormScreen> {
                 const SizedBox(height: 24),
                 if (!isLoan) ...[
                   Text(
-                    'Minimum payment formula',
+                    isOther ? 'Monthly payment' : 'Minimum payment formula',
                     style: Theme.of(context).textTheme.titleSmall,
                   ),
                   const SizedBox(height: 8),
-                  SegmentedButton<MinPaymentType>(
-                    segments: const <ButtonSegment<MinPaymentType>>[
-                      ButtonSegment(
-                        value: MinPaymentType.fixed,
-                        label: Text('Fixed'),
-                      ),
-                      ButtonSegment(
-                        value: MinPaymentType.interestPlusPercentage,
-                        label: Text('Interest + %'),
-                      ),
-                      ButtonSegment(
-                        value: MinPaymentType.percentageOfBalance,
-                        label: Text('% of bal'),
-                      ),
-                    ],
-                    selected: <MinPaymentType>{_selectedPaymentType},
-                    onSelectionChanged: (Set<MinPaymentType> selected) {
-                      setState(() {
-                        _selectedPaymentType = selected.first;
-                      });
-                    },
-                  ),
-                  const SizedBox(height: 16),
-                  if (_selectedPaymentType == MinPaymentType.fixed)
+                  if (isOther)
                     TextFormField(
                       controller: _minimumPaymentController,
                       keyboardType: const TextInputType.numberWithOptions(
                         decimal: true,
                       ),
                       decoration: const InputDecoration(
-                        labelText: 'Minimum payment (£)',
+                        labelText: 'Manual monthly payment (£)',
+                        helperText:
+                            'Used as a fixed payment each month for personal/other debts.',
                         border: OutlineInputBorder(),
                       ),
                       validator: (String? value) {
                         return _controller.validateMinimumPayment(value);
                       },
-                    ),
-                  if (showRuleFields) ...[
-                    TextFormField(
-                      controller: _percentageController,
-                      keyboardType: const TextInputType.numberWithOptions(
-                        decimal: true,
-                      ),
-                      decoration: InputDecoration(
-                        labelText: _selectedPaymentType ==
-                                MinPaymentType.interestPlusPercentage
-                            ? 'Balance percentage (%)'
-                            : 'Percentage of balance (%)',
-                        helperText: _selectedPaymentType ==
-                                MinPaymentType.interestPlusPercentage
-                            ? 'UK typical: 1% (interest is added automatically)'
-                            : 'UK typical: 2.25%',
-                        border: const OutlineInputBorder(),
-                      ),
-                      validator: (String? value) {
-                        return _controller.validatePercentage(value);
+                    )
+                  else ...[
+                    SegmentedButton<MinPaymentType>(
+                      segments: const <ButtonSegment<MinPaymentType>>[
+                        ButtonSegment(
+                          value: MinPaymentType.fixed,
+                          label: Text('Fixed'),
+                        ),
+                        ButtonSegment(
+                          value: MinPaymentType.interestPlusPercentage,
+                          label: Text('Interest + %'),
+                        ),
+                        ButtonSegment(
+                          value: MinPaymentType.percentageOfBalance,
+                          label: Text('% of bal'),
+                        ),
+                      ],
+                      selected: <MinPaymentType>{_selectedPaymentType},
+                      onSelectionChanged: (Set<MinPaymentType> selected) {
+                        setState(() {
+                          _selectedPaymentType = selected.first;
+                        });
                       },
                     ),
                     const SizedBox(height: 16),
-                    TextFormField(
-                      controller: _floorController,
-                      keyboardType: const TextInputType.numberWithOptions(
-                        decimal: true,
+                    if (_selectedPaymentType == MinPaymentType.fixed)
+                      TextFormField(
+                        controller: _minimumPaymentController,
+                        keyboardType: const TextInputType.numberWithOptions(
+                          decimal: true,
+                        ),
+                        decoration: const InputDecoration(
+                          labelText: 'Minimum payment (£)',
+                          border: OutlineInputBorder(),
+                        ),
+                        validator: (String? value) {
+                          return _controller.validateMinimumPayment(value);
+                        },
                       ),
-                      decoration: const InputDecoration(
-                        labelText: 'Minimum floor (£)',
-                        helperText: 'The lowest monthly payment allowed',
-                        border: OutlineInputBorder(),
+                    if (showRuleFields) ...[
+                      TextFormField(
+                        controller: _percentageController,
+                        keyboardType: const TextInputType.numberWithOptions(
+                          decimal: true,
+                        ),
+                        decoration: InputDecoration(
+                          labelText: _selectedPaymentType ==
+                                  MinPaymentType.interestPlusPercentage
+                              ? 'Balance percentage (%)'
+                              : 'Percentage of balance (%)',
+                          helperText: _selectedPaymentType ==
+                                  MinPaymentType.interestPlusPercentage
+                              ? 'UK typical: 1% (interest is added automatically)'
+                              : 'UK typical: 2.25%',
+                          border: const OutlineInputBorder(),
+                        ),
+                        validator: (String? value) {
+                          return _controller.validatePercentage(value);
+                        },
                       ),
-                      validator: (String? value) {
-                        return _controller.validateFloor(value);
-                      },
-                    ),
+                    ],
                   ],
                 ],
                 const SizedBox(height: 24),
@@ -449,38 +441,28 @@ class _DebtFormScreenState extends State<DebtFormScreen> {
     if (picked != null) {
       setState(() {
         _startDate = DateTime(picked.year, picked.month);
-        if (_loanEndDate != null && _loanEndDate!.isBefore(_startDate)) {
-          _loanEndDate = _startDate;
-        }
       });
     }
   }
 
-  Future<void> _pickLoanEndDate() async {
-    final now = DateTime.now();
-    final initialDate = _loanEndDate != null && !_loanEndDate!.isBefore(_startDate)
-        ? _loanEndDate!
-        : _startDate;
-    final picked = await showDatePicker(
-      context: context,
-      initialDate: initialDate,
-      firstDate: _startDate,
-      lastDate: DateTime(now.year + 40, 12),
+  DateTime? _computeLoanEndDate() {
+    final years = int.tryParse(_loanLengthController.text.trim());
+    if (years == null || years <= 0) return null;
+    final totalMonths = _startDate.month + years * 12;
+    return DateTime(
+      _startDate.year + (totalMonths - 1) ~/ 12,
+      ((totalMonths - 1) % 12) + 1,
     );
-    if (picked != null) {
-      setState(() {
-        _loanEndDate = DateTime(picked.year, picked.month);
-      });
-    }
   }
 
-  void _submit() {
+  Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) {
       return;
     }
 
+    final isOther = _selectedDebtType == DebtType.other;
     final loanTermError = _selectedDebtType == DebtType.loan
-        ? _controller.validateLoanTerm(_startDate, _loanEndDate)
+        ? _controller.validateLoanTerm(_startDate, _computeLoanEndDate())
         : null;
     if (loanTermError != null) {
       ScaffoldMessenger.of(context)
@@ -491,24 +473,117 @@ class _DebtFormScreenState extends State<DebtFormScreen> {
       return;
     }
 
-    _controller.saveDebt(
-      debtId: _existingDebt?.id,
-      name: _nameController.text,
-      debtType: _selectedDebtType,
-      balance: _balanceController.text,
-      apr: _aprController.text,
-      minimumPayment: _selectedDebtType == DebtType.loan
-          ? '0'
-          : _selectedPaymentType == MinPaymentType.fixed
-          ? _minimumPaymentController.text
-          : '0',
-      minPaymentType: _selectedPaymentType,
-      percentage: _percentageController.text,
-      floor: _floorController.text,
-      startDate: _startDate,
-      loanEndDate: _selectedDebtType == DebtType.loan ? _loanEndDate : null,
-      extraPayments: _existingDebt?.extraPayments,
-    );
+    final balance = AmountParser.tryParse(_balanceController.text) ?? 0;
+    final apr =
+      isOther ? 0.0 : (AmountParser.tryParse(_aprController.text) ?? 0.0);
+
+    if (!isOther && apr > 60) {
+      final proceedHighApr = await showDialog<bool>(
+            context: context,
+            builder: (ctx) => AlertDialog(
+              title: const Text('Very high APR'),
+              content: const Text(
+                'APR is above 60%. Please confirm this is intentional.',
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx, false),
+                  child: const Text('Cancel'),
+                ),
+                FilledButton(
+                  onPressed: () => Navigator.pop(ctx, true),
+                  child: const Text('Continue'),
+                ),
+              ],
+            ),
+          ) ??
+          false;
+      if (!proceedHighApr) {
+        return;
+      }
+    }
+
+    double projectedMinPayment;
+    if (_selectedDebtType == DebtType.loan) {
+      projectedMinPayment = _controller.estimateLoanPayment(
+            balance: _balanceController.text,
+            apr: _aprController.text,
+            startDate: _startDate,
+            endDate: _computeLoanEndDate(),
+          ) ??
+          0;
+    } else if (isOther || _selectedPaymentType == MinPaymentType.fixed) {
+      projectedMinPayment =
+          AmountParser.tryParse(_minimumPaymentController.text) ?? 0;
+    } else {
+      final rule = MinPaymentRule(
+        type: _selectedPaymentType,
+        percentage: AmountParser.tryParse(_percentageController.text) ?? 1.0,
+        floor: AmountParser.tryParse(_floorController.text) ?? 25.0,
+      );
+      projectedMinPayment = rule.calculate(balance, apr, 0);
+    }
+
+    final monthlyInterest = balance * (apr / 100) / 12;
+    if (apr > 0 && projectedMinPayment <= monthlyInterest) {
+      final proceedLowPayment = await showDialog<bool>(
+            context: context,
+            builder: (ctx) => AlertDialog(
+              title: const Text('Payment may not reduce balance'),
+              content: Text(
+                'Estimated minimum payment (£${projectedMinPayment.toStringAsFixed(2)}) '
+                'is less than or equal to monthly interest '
+                '(£${monthlyInterest.toStringAsFixed(2)}).\n\n'
+                'This debt could grow over time. Continue anyway?',
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx, false),
+                  child: const Text('Cancel'),
+                ),
+                FilledButton(
+                  onPressed: () => Navigator.pop(ctx, true),
+                  child: const Text('Continue'),
+                ),
+              ],
+            ),
+          ) ??
+          false;
+      if (!proceedLowPayment) {
+        return;
+      }
+    }
+
+    try {
+      _controller.saveDebt(
+        debtId: _existingDebt?.id,
+        name: _nameController.text,
+        debtType: _selectedDebtType,
+        balance: _balanceController.text,
+        apr: isOther ? '0' : _aprController.text,
+        minimumPayment: _selectedDebtType == DebtType.loan
+            ? '0'
+            : isOther
+                ? _minimumPaymentController.text
+                : _selectedPaymentType == MinPaymentType.fixed
+                    ? _minimumPaymentController.text
+                    : '0',
+        paymentDay: _paymentDay,
+        minPaymentType: isOther ? MinPaymentType.fixed : _selectedPaymentType,
+        percentage: _percentageController.text,
+        floor: _floorController.text,
+        startDate: _startDate,
+        loanEndDate:
+            _selectedDebtType == DebtType.loan ? _computeLoanEndDate() : null,
+        extraPayments: _existingDebt?.extraPayments,
+      );
+    } on ArgumentError catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(SnackBar(content: Text(e.message.toString())));
+      return;
+    }
 
     if (!mounted) {
       return;

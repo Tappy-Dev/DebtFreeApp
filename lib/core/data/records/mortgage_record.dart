@@ -10,6 +10,7 @@ class MortgageRecord {
     required this.monthlyPayment,
     required this.remainingTermMonths,
     required this.overpayment,
+    required this.paymentDay,
   });
 
   factory MortgageRecord.fromMortgage(Mortgage mortgage) {
@@ -21,6 +22,7 @@ class MortgageRecord {
       monthlyPayment: mortgage.monthlyPayment,
       remainingTermMonths: mortgage.remainingTermMonths,
       overpayment: mortgage.overpayment,
+      paymentDay: mortgage.paymentDay,
     );
   }
 
@@ -33,6 +35,7 @@ class MortgageRecord {
       monthlyPayment: row.read<double>(monthlyPaymentColumn),
       remainingTermMonths: row.read<int>(remainingTermMonthsColumn),
       overpayment: row.read<double>(overpaymentColumn),
+      paymentDay: row.read<int>(paymentDayColumn),
     );
   }
 
@@ -43,14 +46,15 @@ class MortgageRecord {
   static const String monthlyPaymentColumn = 'monthly_payment';
   static const String remainingTermMonthsColumn = 'remaining_term_months';
   static const String overpaymentColumn = 'overpayment';
+  static const String paymentDayColumn = 'payment_day';
 
   static const String selectColumns =
       '$idColumn, $nameColumn, $balanceColumn, $annualRateColumn, '
-      '$monthlyPaymentColumn, $remainingTermMonthsColumn, $overpaymentColumn';
+      '$monthlyPaymentColumn, $remainingTermMonthsColumn, $overpaymentColumn, $paymentDayColumn';
 
   static const String insertColumns =
       '($idColumn, $nameColumn, $balanceColumn, $annualRateColumn, '
-      '$monthlyPaymentColumn, $remainingTermMonthsColumn, $overpaymentColumn)';
+      '$monthlyPaymentColumn, $remainingTermMonthsColumn, $overpaymentColumn, $paymentDayColumn)';
 
   final String id;
   final String name;
@@ -59,6 +63,7 @@ class MortgageRecord {
   final double monthlyPayment;
   final int remainingTermMonths;
   final double overpayment;
+  final int paymentDay;
 
   Mortgage toMortgage() {
     return Mortgage(
@@ -69,6 +74,7 @@ class MortgageRecord {
       monthlyPayment: monthlyPayment,
       remainingTermMonths: remainingTermMonths,
       overpayment: overpayment,
+      paymentDay: paymentDay,
     );
   }
 
@@ -81,6 +87,7 @@ class MortgageRecord {
       monthlyPayment,
       remainingTermMonths,
       overpayment,
+      paymentDay,
     ];
   }
 }

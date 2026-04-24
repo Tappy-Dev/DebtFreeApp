@@ -30,6 +30,9 @@ class DemoFinancialRepository implements FinancialRepository {
   }
 
   @override
+  List<Expense> getSubscriptions() => const [];
+
+  @override
   List<IncomeSource> getIncomeSources() {
     return List<IncomeSource>.unmodifiable(DemoData.income);
   }
@@ -42,6 +45,11 @@ class DemoFinancialRepository implements FinancialRepository {
   @override
   Mortgage? getMortgage() {
     return DemoData.mortgage;
+  }
+
+  @override
+  List<Mortgage> getMortgages() {
+    return <Mortgage>[DemoData.mortgage];
   }
 
   @override
@@ -92,6 +100,9 @@ class DemoFinancialRepository implements FinancialRepository {
 
   @override
   void deleteMortgage() {}
+
+  @override
+  void deleteMortgageById(String mortgageId) {}
 
   @override
   Future<List<BudgetPeriod>> getBudgetPeriods() async => const [];

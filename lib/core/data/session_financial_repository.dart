@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:debt_free_app/core/data/drift_financial_database.dart';
 import 'package:debt_free_app/core/data/financial_repository.dart';
-import 'package:debt_free_app/core/data/financial_repository_extensions.dart';
 import 'package:debt_free_app/core/sample/demo_data.dart';
 import 'package:debt_free_app/core/utils/financial_month.dart';
 import 'package:debt_free_app/features/planner/models/planner_event.dart';
@@ -50,7 +49,7 @@ class SessionFinancialRepository extends ChangeNotifier
   final Map<String, List<Expense>> _billsByMonth = <String, List<Expense>>{};
   String _activeBudgetMonth = _currentMonthKey();
   final List<ScenarioChange> _scenarioChanges = <ScenarioChange>[];
-  Mortgage? _mortgage;
+  final List<Mortgage> _mortgages = <Mortgage>[];
   final List<PlannerEvent> _plannerEvents = <PlannerEvent>[];
   String? _appStartMonth;
   int _financialMonthStartDay = 1;
@@ -238,7 +237,7 @@ class SessionFinancialRepository extends ChangeNotifier
     _expensesByMonth.clear();
     _billsByMonth.clear();
     _scenarioChanges.clear();
-    _mortgage = null;
+    _mortgages.clear();
     _plannerEvents.clear();
     _closedMonthKeys.clear();
     _appStartMonth = null;
@@ -259,7 +258,7 @@ class SessionFinancialRepository extends ChangeNotifier
     final loadedBills = await _database.budgetItemsDao.loadBills();
     final loadedScenarioChanges = await _database.scenarioChangesDao.loadAll();
 
-    final loadedMortgage = await _database.mortgageDao.load();
+    final loadedMortgages = await _database.mortgageDao.loadAll();
 
     final loadedPlannerEvents = await _database.plannerEventsDao.loadAll();
     final loadedAppStartMonth = await _database.appSettingsDao.getAppStartMonth();
@@ -303,7 +302,9 @@ class SessionFinancialRepository extends ChangeNotifier
       _scenarioChanges
         ..clear()
         ..addAll(DemoData.extraPaymentScenario);
-      _mortgage = DemoData.mortgage;
+      _mortgages
+        ..clear()
+        ..add(DemoData.mortgage);
       await _persistAll();
       notifyListeners();
       return;
@@ -363,7 +364,9 @@ class SessionFinancialRepository extends ChangeNotifier
     _scenarioChanges
       ..clear()
       ..addAll(loadedScenarioChanges);
-    _mortgage = loadedMortgage;
+    _mortgages
+      ..clear()
+      ..addAll(loadedMortgages);
     _plannerEvents
       ..clear()
       ..addAll(loadedPlannerEvents);
@@ -590,8 +593,17 @@ class SessionFinancialRepository extends ChangeNotifier
 
   @override
   List<Expense> getBills() {
+    final all = _billsByMonth[_activeBudgetMonth] ?? const <Expense>[];
     return List<Expense>.unmodifiable(
-      _billsByMonth[_activeBudgetMonth] ?? const <Expense>[],
+      all.where((b) => !b.isSubscription),
+    );
+  }
+
+  @override
+  List<Expense> getSubscriptions() {
+    final all = _billsByMonth[_activeBudgetMonth] ?? const <Expense>[];
+    return List<Expense>.unmodifiable(
+      all.where((b) => b.isSubscription),
     );
   }
 
@@ -632,20 +644,42 @@ class SessionFinancialRepository extends ChangeNotifier
   }
 
   @override
-  Mortgage? getMortgage() => _mortgage;
+  Mortgage? getMortgage() {
+    if (_mortgages.isEmpty) {
+      return null;
+    }
+    return _mortgages.first;
+  }
+
+  @override
+  List<Mortgage> getMortgages() {
+    return List<Mortgage>.unmodifiable(_mortgages);
+  }
 
   @override
   void saveMortgage(Mortgage mortgage) {
-    _mortgage = mortgage;
+    final index = _mortgages.indexWhere((m) => m.id == mortgage.id);
+    if (index == -1) {
+      _mortgages.add(mortgage);
+    } else {
+      _mortgages[index] = mortgage;
+    }
     notifyListeners();
     _scheduleWrite(() => _database.mortgageDao.upsert(mortgage));
   }
 
   @override
   void deleteMortgage() {
-    _mortgage = null;
+    _mortgages.clear();
     notifyListeners();
     _scheduleWrite(() => _database.mortgageDao.deleteAll());
+  }
+
+  @override
+  void deleteMortgageById(String mortgageId) {
+    _mortgages.removeWhere((m) => m.id == mortgageId);
+    notifyListeners();
+    _scheduleWrite(() => _database.mortgageDao.deleteById(mortgageId));
   }
 
   // ── Planner events ──
@@ -772,8 +806,8 @@ class SessionFinancialRepository extends ChangeNotifier
       }
     }
     await _database.scenarioChangesDao.replaceAll(_scenarioChanges);
-    if (_mortgage != null) {
-      await _database.mortgageDao.upsert(_mortgage!);
+    for (final mortgage in _mortgages) {
+      await _database.mortgageDao.upsert(mortgage);
     }
   }
 

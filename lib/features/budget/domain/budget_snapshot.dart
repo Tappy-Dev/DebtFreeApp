@@ -2,6 +2,7 @@ class BudgetSnapshot {
   const BudgetSnapshot({
     required this.totalIncome,
     required this.totalBills,
+    required this.totalSubscriptions,
     required this.totalExpenses,
     required this.totalMinimumPayments,
     required this.mortgagePayment,
@@ -11,6 +12,7 @@ class BudgetSnapshot {
 
   final double totalIncome;
   final double totalBills;
+  final double totalSubscriptions;
   final double totalExpenses;
   final double totalMinimumPayments;
   final double mortgagePayment;

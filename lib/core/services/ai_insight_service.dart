@@ -1,3 +1,5 @@
+import 'package:debt_free_app/core/data/session_financial_repository.dart';
+import 'package:debt_free_app/core/services/ai_usage_service.dart';
 import 'package:debt_free_app/core/services/financial_summary.dart';
 import 'package:firebase_ai/firebase_ai.dart';
 
@@ -5,29 +7,18 @@ class AiInsightService {
   AiInsightService();
 
   static const String _modelName = 'gemini-2.5-flash';
+  static const int _scenarioMaxOutputTokens = 900;
+  static const int _plannerMaxOutputTokens = 1100;
+  static const int _advisorMaxOutputTokens = 1200;
 
   Future<String> generateInsight(FinancialSummary summary) async {
-    final model = FirebaseAI.googleAI().generativeModel(
-      model: _modelName,
-      generationConfig: GenerationConfig(
-        temperature: 0.7,
-        maxOutputTokens: 65536,
-      ),
-      systemInstruction: Content.system(_systemPrompt),
-    );
-
     final prompt = _buildUserPrompt(summary);
-
-    try {
-      final response = await model.generateContent([Content.text(prompt)]);
-      final text = response.text;
-      if (text == null || text.isEmpty) {
-        throw AiInsightException('No response received from AI.');
-      }
-      return text;
-    } on FirebaseAIException catch (e) {
-      throw AiInsightException('AI request failed: ${e.message}');
-    }
+    return _generateContent(
+      requestType: AiRequestType.scenario,
+      systemPrompt: _systemPrompt,
+      prompt: prompt,
+      maxOutputTokens: _scenarioMaxOutputTokens,
+    );
   }
 
   static const String _systemPrompt = '''
@@ -46,6 +37,9 @@ Your job is to:
 Rules:
 - Use GBP (£) throughout
 - Be concise — use bullet points and short paragraphs
+- Never use markdown tables or pipe-delimited table formatting
+- For comparisons, use short bullets with one metric per line
+- Keep the full response under 350 words unless a calculation needs more detail
 - Be encouraging but honest
 - Never recommend specific financial products or providers
 - Remind them this is guidance, not regulated financial advice
@@ -84,6 +78,9 @@ Rules:
 - Use GBP (£) throughout
 - Use UK 2025/26 PAYE tax rates and NI thresholds for salary calculations
 - Be concise — use bullet points and short paragraphs
+- Never use markdown tables or pipe-delimited table formatting
+- Present calculations as simple labelled lines, not columns
+- Keep the full response under 450 words unless calculations need more detail
 - Be encouraging but honest about trade-offs
 - Never recommend specific financial products or providers
 - Remind them this is guidance, not regulated financial advice
@@ -91,15 +88,6 @@ Rules:
 ''';
 
   Future<String> generatePlannerInsight(FinancialSummary summary) async {
-    final model = FirebaseAI.googleAI().generativeModel(
-      model: _modelName,
-      generationConfig: GenerationConfig(
-        temperature: 0.7,
-        maxOutputTokens: 65536,
-      ),
-      systemInstruction: Content.system(_plannerSystemPrompt),
-    );
-
     final now = DateTime.now();
     final dateStr = '${now.day} ${_monthName(now.month)} ${now.year}';
     final prompt = '''
@@ -112,16 +100,12 @@ ${summary.toPromptText()}
 For each event, break down the financial impact. Then give me an overall assessment of what happens if I go ahead with all of them.
 ''';
 
-    try {
-      final response = await model.generateContent([Content.text(prompt)]);
-      final text = response.text;
-      if (text == null || text.isEmpty) {
-        throw AiInsightException('No response received from AI.');
-      }
-      return text;
-    } on FirebaseAIException catch (e) {
-      throw AiInsightException('AI request failed: ${e.message}');
-    }
+    return _generateContent(
+      requestType: AiRequestType.planner,
+      systemPrompt: _plannerSystemPrompt,
+      prompt: prompt,
+      maxOutputTokens: _plannerMaxOutputTokens,
+    );
   }
 
   static String _monthName(int month) {
@@ -146,7 +130,10 @@ Your job is to:
 Rules:
 - Use GBP (£) throughout
 - Use current UK financial rates and thresholds where relevant
-- Be concise — use bullet points, tables and short paragraphs
+- Be concise — use bullet points and short paragraphs
+- Never use markdown tables or pipe-delimited table formatting
+- If you need comparisons, write them as labelled bullet points instead of columns
+- Keep the full response under 500 words unless the user asks for detailed calculations
 - Be encouraging but honest about trade-offs
 - Never recommend specific financial products or providers
 - Remind them this is guidance, not regulated financial advice
@@ -155,15 +142,6 @@ Rules:
 
   Future<String> generateAdvisorInsight(
       FinancialSummary summary, String question) async {
-    final model = FirebaseAI.googleAI().generativeModel(
-      model: _modelName,
-      generationConfig: GenerationConfig(
-        temperature: 0.7,
-        maxOutputTokens: 65536,
-      ),
-      systemInstruction: Content.system(_advisorSystemPrompt),
-    );
-
     final now = DateTime.now();
     final dateStr = '${now.day} ${_monthName(now.month)} ${now.year}';
     final prompt = '''
@@ -176,16 +154,136 @@ ${summary.toPromptText()}
 My question: $question
 ''';
 
+    return _generateContent(
+      requestType: AiRequestType.advisor,
+      systemPrompt: _advisorSystemPrompt,
+      prompt: prompt,
+      maxOutputTokens: _advisorMaxOutputTokens,
+    );
+  }
+
+  Future<String> _generateContent({
+    required AiRequestType requestType,
+    required String systemPrompt,
+    required String prompt,
+    required int maxOutputTokens,
+  }) async {
+    final usageService = AiUsageService.instance;
+    await usageService.initialize(SessionFinancialRepository.instance.database);
+    final snapshot = await usageService.currentSnapshot();
+    if (snapshot.limitReached) {
+      throw AiInsightException(usageService.usageLimitMessage());
+    }
+
+    final model = FirebaseAI.googleAI().generativeModel(
+      model: _modelName,
+      generationConfig: GenerationConfig(
+        temperature: 0.4,
+        maxOutputTokens: maxOutputTokens,
+      ),
+      systemInstruction: Content.system(systemPrompt),
+    );
+
     try {
       final response = await model.generateContent([Content.text(prompt)]);
       final text = response.text;
       if (text == null || text.isEmpty) {
         throw AiInsightException('No response received from AI.');
       }
-      return text;
+      final normalizedText = _normalizeResponse(text);
+      await usageService.recordRequest(
+        requestType: requestType,
+        systemPrompt: systemPrompt,
+        prompt: prompt,
+        responseText: normalizedText,
+      );
+      return normalizedText;
     } on FirebaseAIException catch (e) {
       throw AiInsightException('AI request failed: ${e.message}');
     }
+  }
+
+  static String _normalizeResponse(String text) {
+    final flattenedTables = _flattenMarkdownTables(text);
+    return flattenedTables
+        .replaceAll(RegExp(r'\n{3,}'), '\n\n')
+        .trim();
+  }
+
+  static String _flattenMarkdownTables(String text) {
+    final lines = text.split('\n');
+    final output = <String>[];
+    var index = 0;
+
+    while (index < lines.length) {
+      final line = lines[index];
+      if (!_looksLikeTableRow(line)) {
+        output.add(line);
+        index++;
+        continue;
+      }
+
+      final block = <String>[];
+      while (index < lines.length && _looksLikeTableRow(lines[index])) {
+        block.add(lines[index]);
+        index++;
+      }
+
+      if (!_looksLikeMarkdownTable(block)) {
+        output.addAll(block);
+        continue;
+      }
+
+      output.addAll(_convertTableBlock(block));
+    }
+
+    return output.join('\n');
+  }
+
+  static bool _looksLikeTableRow(String line) {
+    final trimmed = line.trim();
+    return trimmed.startsWith('|') && trimmed.endsWith('|');
+  }
+
+  static bool _looksLikeMarkdownTable(List<String> block) {
+    if (block.length < 2) return false;
+    final separator = block[1].trim();
+    return RegExp(r'^\|?(\s*:?-{3,}:?\s*\|)+\s*:?-{3,}:?\s*\|?$')
+        .hasMatch(separator);
+  }
+
+  static List<String> _convertTableBlock(List<String> block) {
+    final headers = _parseTableCells(block.first);
+    final rows = block.skip(2).map(_parseTableCells).where((cells) => cells.isNotEmpty);
+    final converted = <String>[];
+
+    for (final row in rows) {
+      final pairs = <String>[];
+      for (var i = 0; i < row.length && i < headers.length; i++) {
+        final header = headers[i];
+        final value = row[i];
+        if (header.isEmpty || value.isEmpty) continue;
+        pairs.add('$header: $value');
+      }
+      if (pairs.isNotEmpty) {
+        converted.add('- ${pairs.join('; ')}');
+      }
+    }
+
+    if (converted.isEmpty) {
+      converted.addAll(block);
+    }
+
+    return converted;
+  }
+
+  static List<String> _parseTableCells(String row) {
+    final trimmed = row.trim();
+    final withoutEdges = trimmed.replaceFirst(RegExp(r'^\|'), '').replaceFirst(RegExp(r'\|$'), '');
+    return withoutEdges
+        .split('|')
+        .map((cell) => cell.trim())
+        .toList(growable: false);
   }
 }
 

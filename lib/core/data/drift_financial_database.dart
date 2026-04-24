@@ -36,7 +36,7 @@ class DriftFinancialDatabase extends GeneratedDatabase {
   late final AppSettingsDao appSettingsDao = AppSettingsDao(this);
 
   @override
-  int get schemaVersion => 18;
+  int get schemaVersion => 20;
 
   @override
   Iterable<TableInfo> get allTables => const <TableInfo>[];
@@ -68,17 +68,37 @@ class DriftFinancialDatabase extends GeneratedDatabase {
           await customStatement(DriftSchema.createSalarySacrificesTable);
         }
         if (from < 4) {
-          await customStatement(DriftSchema.addMinPaymentTypeColumn);
-          await customStatement(DriftSchema.addMinPaymentPercentageColumn);
-          await customStatement(DriftSchema.addMinPaymentFloorColumn);
+          await _ensureColumnExists(
+            DriftSchema.debtsTable,
+            'min_payment_type',
+            DriftSchema.addMinPaymentTypeColumn,
+          );
+          await _ensureColumnExists(
+            DriftSchema.debtsTable,
+            'min_payment_percentage',
+            DriftSchema.addMinPaymentPercentageColumn,
+          );
+          await _ensureColumnExists(
+            DriftSchema.debtsTable,
+            'min_payment_floor',
+            DriftSchema.addMinPaymentFloorColumn,
+          );
         }
         if (from < 5) {
           await customStatement(DriftSchema.createBudgetPeriodsTable);
           await customStatement(DriftSchema.createBudgetActualsTable);
         }
         if (from < 6) {
-          await customStatement(DriftSchema.addAnnualGrossColumn);
-          await customStatement(DriftSchema.addStudentLoanPlanColumn);
+          await _ensureColumnExists(
+            DriftSchema.incomeSourcesTable,
+            'annual_gross',
+            DriftSchema.addAnnualGrossColumn,
+          );
+          await _ensureColumnExists(
+            DriftSchema.incomeSourcesTable,
+            'student_loan_plan',
+            DriftSchema.addStudentLoanPlanColumn,
+          );
         }
         if (from < 7) {
           await customStatement(DriftSchema.createBillsTable);
@@ -87,28 +107,60 @@ class DriftFinancialDatabase extends GeneratedDatabase {
           await customStatement(DriftSchema.createPlannerEventsTable);
         }
         if (from < 9) {
-          await customStatement(DriftSchema.addMonthKeyToIncomeSources);
-          await customStatement(DriftSchema.addMonthKeyToExpenses);
-          await customStatement(DriftSchema.addMonthKeyToBills);
+          await _ensureColumnExists(
+            DriftSchema.incomeSourcesTable,
+            'month_key',
+            DriftSchema.addMonthKeyToIncomeSources,
+          );
+          await _ensureColumnExists(
+            DriftSchema.expensesTable,
+            'month_key',
+            DriftSchema.addMonthKeyToExpenses,
+          );
+          await _ensureColumnExists(
+            DriftSchema.billsTable,
+            'month_key',
+            DriftSchema.addMonthKeyToBills,
+          );
         }
         if (from < 10) {
           await customStatement(DriftSchema.createAppSettingsTable);
-          await customStatement(DriftSchema.addDebtBalanceToActuals);
+          await _ensureColumnExists(
+            DriftSchema.budgetActualsTable,
+            'debt_balance',
+            DriftSchema.addDebtBalanceToActuals,
+          );
         }
         if (from < 11) {
-          await customStatement(DriftSchema.addIsTrackableToExpenses);
+          await _ensureColumnExists(
+            DriftSchema.expensesTable,
+            'is_trackable',
+            DriftSchema.addIsTrackableToExpenses,
+          );
         }
         if (from < 12) {
           await customStatement(DriftSchema.createBudgetActualEntriesTable);
         }
         if (from < 13) {
-          await customStatement(DriftSchema.addScenarioDebtIdColumn);
+          await _ensureColumnExists(
+            DriftSchema.scenarioChangesTable,
+            DriftSchema.scenarioDebtIdColumn,
+            DriftSchema.addScenarioDebtIdColumn,
+          );
         }
         if (from < 14) {
-          await customStatement(DriftSchema.addStartDateColumn);
+          await _ensureColumnExists(
+            DriftSchema.debtsTable,
+            'start_date',
+            DriftSchema.addStartDateColumn,
+          );
         }
         if (from < 15) {
-          await customStatement(DriftSchema.addOriginalBalanceColumn);
+          await _ensureColumnExists(
+            DriftSchema.debtsTable,
+            'original_balance',
+            DriftSchema.addOriginalBalanceColumn,
+          );
           await customStatement(DriftSchema.createDebtExtraPaymentsTable);
           // Backfill original_balance with current balance for existing debts
           await customStatement(
@@ -116,20 +168,74 @@ class DriftFinancialDatabase extends GeneratedDatabase {
           );
         }
         if (from < 16) {
-          await customStatement(DriftSchema.addDebtTypeColumn);
-          await customStatement(DriftSchema.addLoanEndDateColumn);
+          await _ensureColumnExists(
+            DriftSchema.debtsTable,
+            'debt_type',
+            DriftSchema.addDebtTypeColumn,
+          );
+          await _ensureColumnExists(
+            DriftSchema.debtsTable,
+            'loan_end_date',
+            DriftSchema.addLoanEndDateColumn,
+          );
         }
         if (from < 17) {
-          await customStatement(DriftSchema.addMonthlyTaxableBenefitsColumn);
-          await customStatement(DriftSchema.addMonthlyNiableBenefitsColumn);
-          await customStatement(
+          await _ensureColumnExists(
+            DriftSchema.incomeSourcesTable,
+            'monthly_taxable_benefits',
+            DriftSchema.addMonthlyTaxableBenefitsColumn,
+          );
+          await _ensureColumnExists(
+            DriftSchema.incomeSourcesTable,
+            'monthly_niable_benefits',
+            DriftSchema.addMonthlyNiableBenefitsColumn,
+          );
+          await _ensureColumnExists(
+            DriftSchema.incomeSourcesTable,
+            'monthly_student_loanable_benefits',
             DriftSchema.addMonthlyStudentLoanableBenefitsColumn,
           );
         }
         if (from < 18) {
-          await customStatement(DriftSchema.addMonthlyPensionSacrificeColumn);
-          await customStatement(DriftSchema.addMonthlyCarSacrificeColumn);
-          await customStatement(DriftSchema.addMonthlyOtherSacrificeColumn);
+          await _ensureColumnExists(
+            DriftSchema.incomeSourcesTable,
+            'monthly_pension_sacrifice',
+            DriftSchema.addMonthlyPensionSacrificeColumn,
+          );
+          await _ensureColumnExists(
+            DriftSchema.incomeSourcesTable,
+            'monthly_car_sacrifice',
+            DriftSchema.addMonthlyCarSacrificeColumn,
+          );
+          await _ensureColumnExists(
+            DriftSchema.incomeSourcesTable,
+            'monthly_other_sacrifice',
+            DriftSchema.addMonthlyOtherSacrificeColumn,
+          );
+        }
+        if (from < 19) {
+          await _ensureColumnExists(
+            DriftSchema.billsTable,
+            'is_subscription',
+            DriftSchema.addIsSubscriptionToBills,
+          );
+        }
+        if (from < 20) {
+          await _ensureColumnExists(
+            DriftSchema.debtsTable,
+            'payment_day',
+            DriftSchema.addDebtPaymentDayColumn,
+          );
+          await _ensureColumnExists(
+            DriftSchema.billsTable,
+            'payment_day',
+            DriftSchema.addPaymentDayToBills,
+          );
+          await _ensureColumnExists(
+            DriftSchema.mortgageTable,
+            'payment_day',
+            DriftSchema.addMortgagePaymentDayColumn,
+          );
         }
       },
       beforeOpen: (OpeningDetails details) async {
@@ -159,8 +265,18 @@ class DriftFinancialDatabase extends GeneratedDatabase {
 
   Future<Set<String>> _loadColumnNames(String tableName) async {
     final rows = await customSelect('PRAGMA table_info($tableName)').get();
-    return rows
-        .map((QueryRow row) => row.read<String>('name'))
-        .toSet();
+    return rows.map((QueryRow row) => row.read<String>('name')).toSet();
+  }
+
+  Future<void> _ensureColumnExists(
+    String tableName,
+    String columnName,
+    String statement,
+  ) async {
+    final columns = await _loadColumnNames(tableName);
+    if (columns.isEmpty || columns.contains(columnName)) {
+      return;
+    }
+    await customStatement(statement);
   }
 }

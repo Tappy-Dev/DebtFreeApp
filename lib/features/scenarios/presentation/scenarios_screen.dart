@@ -412,6 +412,7 @@ class _ScenariosScreenState extends State<ScenariosScreen> {
         debts: _repository.getDebts(),
         incomeSources: _repository.getIncomeSources(),
         mortgage: _repository.getMortgage(),
+        mortgages: _repository.getMortgages(),
         budgetSnapshot: budgetSnapshot,
         scenarioOverview: overview,
         recentTracking: recentTracking,

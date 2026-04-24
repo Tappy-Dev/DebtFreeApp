@@ -7,6 +7,7 @@ class Mortgage {
     required this.monthlyPayment,
     required this.remainingTermMonths,
     this.overpayment = 0,
+    this.paymentDay = 1,
   });
 
   final String id;
@@ -18,6 +19,9 @@ class Mortgage {
 
   /// Extra monthly amount the user pays on top of the standard payment.
   final double overpayment;
+
+  /// Day of month this mortgage payment is usually taken.
+  final int paymentDay;
 
   double get monthlyInterest =>
       balance <= 0 || annualRate <= 0 ? 0 : balance * (annualRate / 100) / 12;
@@ -32,6 +36,7 @@ class Mortgage {
     double? monthlyPayment,
     int? remainingTermMonths,
     double? overpayment,
+    int? paymentDay,
   }) {
     return Mortgage(
       id: id ?? this.id,
@@ -41,6 +46,7 @@ class Mortgage {
       monthlyPayment: monthlyPayment ?? this.monthlyPayment,
       remainingTermMonths: remainingTermMonths ?? this.remainingTermMonths,
       overpayment: overpayment ?? this.overpayment,
+      paymentDay: paymentDay ?? this.paymentDay,
     );
   }
 }

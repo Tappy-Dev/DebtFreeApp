@@ -52,6 +52,10 @@ class DriftSchema {
     ALTER TABLE debts ADD COLUMN original_balance REAL
   ''';
 
+  static const String addDebtPaymentDayColumn = '''
+    ALTER TABLE debts ADD COLUMN payment_day INTEGER NOT NULL DEFAULT 1
+  ''';
+
   static const String debtExtraPaymentsTable = 'debt_extra_payments';
 
   static const String createDebtExtraPaymentsTable = '''
@@ -185,8 +189,13 @@ class DriftSchema {
       annual_rate REAL NOT NULL,
       monthly_payment REAL NOT NULL,
       remaining_term_months INTEGER NOT NULL,
-      overpayment REAL NOT NULL DEFAULT 0
+      overpayment REAL NOT NULL DEFAULT 0,
+      payment_day INTEGER NOT NULL DEFAULT 1
     )
+  ''';
+
+  static const String addMortgagePaymentDayColumn = '''
+    ALTER TABLE mortgage ADD COLUMN payment_day INTEGER NOT NULL DEFAULT 1
   ''';
 
   static const String salarySacrificesTable = 'salary_sacrifices';
@@ -222,8 +231,18 @@ class DriftSchema {
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL,
       amount REAL NOT NULL,
-      month_key TEXT NOT NULL DEFAULT ''
+      month_key TEXT NOT NULL DEFAULT '',
+      is_subscription INTEGER NOT NULL DEFAULT 0,
+      payment_day INTEGER NOT NULL DEFAULT 1
     )
+  ''';
+
+  static const String addIsSubscriptionToBills = '''
+    ALTER TABLE bills ADD COLUMN is_subscription INTEGER NOT NULL DEFAULT 0
+  ''';
+
+  static const String addPaymentDayToBills = '''
+    ALTER TABLE bills ADD COLUMN payment_day INTEGER NOT NULL DEFAULT 1
   ''';
 
   static const String createBudgetActualsTable = '''

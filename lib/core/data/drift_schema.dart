@@ -135,12 +135,17 @@ class DriftSchema {
       name TEXT NOT NULL,
       amount REAL NOT NULL,
       month_key TEXT NOT NULL DEFAULT '',
-      is_trackable INTEGER NOT NULL DEFAULT 0
+      is_trackable INTEGER NOT NULL DEFAULT 0,
+      category TEXT NOT NULL DEFAULT 'other'
     )
   ''';
 
   static const String addIsTrackableToExpenses = '''
     ALTER TABLE expenses ADD COLUMN is_trackable INTEGER DEFAULT 0
+  ''';
+
+  static const String addCategoryToExpenses = '''
+    ALTER TABLE expenses ADD COLUMN category TEXT NOT NULL DEFAULT 'other'
   ''';
 
   static const String scenarioDebtIdColumn = 'debt_id';
@@ -190,12 +195,17 @@ class DriftSchema {
       monthly_payment REAL NOT NULL,
       remaining_term_months INTEGER NOT NULL,
       overpayment REAL NOT NULL DEFAULT 0,
-      payment_day INTEGER NOT NULL DEFAULT 1
+      payment_day INTEGER NOT NULL DEFAULT 1,
+      deal_end_date INTEGER
     )
   ''';
 
   static const String addMortgagePaymentDayColumn = '''
     ALTER TABLE mortgage ADD COLUMN payment_day INTEGER NOT NULL DEFAULT 1
+  ''';
+
+  static const String addMortgageDealEndDateColumn = '''
+    ALTER TABLE mortgage ADD COLUMN deal_end_date INTEGER
   ''';
 
   static const String salarySacrificesTable = 'salary_sacrifices';
@@ -233,7 +243,8 @@ class DriftSchema {
       amount REAL NOT NULL,
       month_key TEXT NOT NULL DEFAULT '',
       is_subscription INTEGER NOT NULL DEFAULT 0,
-      payment_day INTEGER NOT NULL DEFAULT 1
+      payment_day INTEGER NOT NULL DEFAULT 1,
+      category TEXT NOT NULL DEFAULT 'other'
     )
   ''';
 
@@ -243,6 +254,10 @@ class DriftSchema {
 
   static const String addPaymentDayToBills = '''
     ALTER TABLE bills ADD COLUMN payment_day INTEGER NOT NULL DEFAULT 1
+  ''';
+
+  static const String addCategoryToBills = '''
+    ALTER TABLE bills ADD COLUMN category TEXT NOT NULL DEFAULT 'other'
   ''';
 
   static const String createBudgetActualsTable = '''

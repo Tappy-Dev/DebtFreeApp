@@ -610,6 +610,7 @@ class _MonthlyTrackingScreenState extends State<MonthlyTrackingScreen> {
           icon: Icons.arrow_downward_rounded,
           iconColor: Colors.green,
           title: 'Extra Income',
+          subtitle: 'Non-taxed money received outside your regular salary — e.g. selling items, cash gifts, cashback, or one-off windfalls.',
           actual: summary.totalActualIncome,
           budgeted: summary.totalBudgetedIncome,
           expanded: _extraIncomeExpanded,
@@ -681,10 +682,24 @@ class _MonthlyTrackingScreenState extends State<MonthlyTrackingScreen> {
                     Icon(Icons.shopping_bag_outlined,
                         size: 20, color: theme.colorScheme.error),
                     const SizedBox(width: 8),
-                    Text('Extra Expenses',
-                        style: theme.textTheme.titleSmall
-                            ?.copyWith(fontWeight: FontWeight.w600)),
-                    const Spacer(),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Extra Expenses',
+                              style: theme.textTheme.titleSmall
+                                  ?.copyWith(fontWeight: FontWeight.w600)),
+                          const SizedBox(height: 2),
+                          Text(
+                            'One-off or unplanned spending not covered in your monthly budget — e.g. car repairs, medical bills, or unexpected purchases.',
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: theme.colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 8),
                     Text(
                       _currency.format(summary.extraExpenseActuals
                           .fold(0.0, (s, a) => s + a.actual)),
@@ -716,13 +731,26 @@ class _MonthlyTrackingScreenState extends State<MonthlyTrackingScreen> {
 
         // ── Close / Re-open month ──
         if (summary.period.isOpen)
-          FilledButton.tonalIcon(
-            onPressed: _closeMonth,
-            icon: const Icon(Icons.lock_outline, size: 18),
-            label: const Text('Close Month'),
-            style: FilledButton.styleFrom(
-              minimumSize: const Size.fromHeight(48),
-            ),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              FilledButton.tonalIcon(
+                onPressed: _closeMonth,
+                icon: const Icon(Icons.lock_outline, size: 18),
+                label: const Text('Close Month'),
+                style: FilledButton.styleFrom(
+                  minimumSize: const Size.fromHeight(48),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Once you\'re happy all spending and income has been recorded, close the month to lock it in. Closed months feed into your progress reports and debt payoff timeline.',
+                textAlign: TextAlign.center,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ],
           )
         else
           Column(
@@ -863,6 +891,7 @@ class _MonthlyTrackingScreenState extends State<MonthlyTrackingScreen> {
     required bool expanded,
     required VoidCallback onTap,
     required List<Widget> children,
+    String? subtitle,
   }) {
     final theme = Theme.of(context);
     return Card(
@@ -884,10 +913,26 @@ class _MonthlyTrackingScreenState extends State<MonthlyTrackingScreen> {
                 children: [
                   Icon(icon, size: 20, color: iconColor),
                   const SizedBox(width: 8),
-                  Text(title,
-                      style: theme.textTheme.titleSmall
-                          ?.copyWith(fontWeight: FontWeight.w600)),
-                  const Spacer(),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(title,
+                            style: theme.textTheme.titleSmall
+                                ?.copyWith(fontWeight: FontWeight.w600)),
+                        if (subtitle != null) ...[  
+                          const SizedBox(height: 2),
+                          Text(
+                            subtitle,
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: theme.colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
                   _buildAmountChip(actual, budgeted, theme),
                   const SizedBox(width: 8),
                   AnimatedRotation(

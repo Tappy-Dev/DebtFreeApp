@@ -299,6 +299,7 @@ class _ScenariosScreenState extends State<ScenariosScreen> {
                 insight: _aiInsight,
                 isLoading: _aiLoading,
                 error: _aiError,
+                hasData: _hasAiData,
                 onGenerate: () => _generateAiInsight(overview),
               ),
               const SizedBox(height: 16),
@@ -382,6 +383,12 @@ class _ScenariosScreenState extends State<ScenariosScreen> {
     });
     _showSnackBar('Scenario cleared.');
   }
+
+  bool get _hasAiData =>
+      _repository.getIncomeSources().isNotEmpty &&
+      (_repository.getDebts().isNotEmpty ||
+          _repository.getMortgages().isNotEmpty ||
+          _repository.getMortgage() != null);
 
   Future<void> _generateAiInsight(ScenarioOverview overview) async {
     setState(() {
@@ -587,12 +594,14 @@ class _AiInsightsCard extends StatelessWidget {
     required this.insight,
     required this.isLoading,
     required this.error,
+    required this.hasData,
     required this.onGenerate,
   });
 
   final String? insight;
   final bool isLoading;
   final String? error;
+  final bool hasData;
   final VoidCallback onGenerate;
 
   @override
@@ -624,7 +633,24 @@ class _AiInsightsCard extends StatelessWidget {
               'debts, mortgage, budget, and current scenario.',
             ),
             const SizedBox(height: 16),
-            if (isLoading)
+            if (!hasData)
+              Row(
+                children: [
+                  Icon(Icons.lock_outline_rounded,
+                      size: 18,
+                      color: theme.colorScheme.onSurfaceVariant),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Add income and at least one debt to unlock AI insights.',
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ),
+                ],
+              )
+            else if (isLoading)
               const Center(
                 child: Padding(
                   padding: EdgeInsets.all(24),

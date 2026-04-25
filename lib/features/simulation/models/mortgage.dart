@@ -8,6 +8,7 @@ class Mortgage {
     required this.remainingTermMonths,
     this.overpayment = 0,
     this.paymentDay = 1,
+    this.dealEndDate,
   });
 
   final String id;
@@ -23,6 +24,9 @@ class Mortgage {
   /// Day of month this mortgage payment is usually taken.
   final int paymentDay;
 
+  /// When the current fixed-rate deal expires (null = unknown / tracker / SVR).
+  final DateTime? dealEndDate;
+
   double get monthlyInterest =>
       balance <= 0 || annualRate <= 0 ? 0 : balance * (annualRate / 100) / 12;
 
@@ -37,6 +41,8 @@ class Mortgage {
     int? remainingTermMonths,
     double? overpayment,
     int? paymentDay,
+    // Use Object? sentinel so callers can explicitly clear dealEndDate to null.
+    Object? dealEndDate = _sentinel,
   }) {
     return Mortgage(
       id: id ?? this.id,
@@ -47,6 +53,11 @@ class Mortgage {
       remainingTermMonths: remainingTermMonths ?? this.remainingTermMonths,
       overpayment: overpayment ?? this.overpayment,
       paymentDay: paymentDay ?? this.paymentDay,
+      dealEndDate: dealEndDate == _sentinel
+          ? this.dealEndDate
+          : dealEndDate as DateTime?,
     );
   }
 }
+
+const Object _sentinel = Object();

@@ -72,12 +72,13 @@ class BudgetItemsDao {
     return _database.customStatement(
       '''
       INSERT INTO ${DriftSchema.expensesTable} ${BudgetItemRecord.insertColumns}
-      VALUES (?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?)
       ON CONFLICT(id) DO UPDATE SET
         name = excluded.name,
         amount = excluded.amount,
         month_key = excluded.month_key,
-        is_trackable = excluded.is_trackable
+        is_trackable = excluded.is_trackable,
+        category = excluded.category
       ''',
       record.toSqlVariables(),
     );
@@ -110,14 +111,15 @@ class BudgetItemsDao {
 
     return _database.customStatement(
       '''
-      INSERT INTO ${DriftSchema.billsTable} (id, name, amount, month_key, is_subscription, payment_day)
-      VALUES (?, ?, ?, ?, ?, ?)
+      INSERT INTO ${DriftSchema.billsTable} (id, name, amount, month_key, is_subscription, payment_day, category)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(id) DO UPDATE SET
         name = excluded.name,
         amount = excluded.amount,
         month_key = excluded.month_key,
         is_subscription = excluded.is_subscription,
-        payment_day = excluded.payment_day
+        payment_day = excluded.payment_day,
+        category = excluded.category
       ''',
       [
         record.id,
@@ -126,6 +128,7 @@ class BudgetItemsDao {
         record.monthKey,
         record.isSubscription ? 1 : 0,
         record.paymentDay ?? 1,
+        record.category,
       ],
     );
   }

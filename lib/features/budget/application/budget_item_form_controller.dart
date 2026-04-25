@@ -53,6 +53,7 @@ class BudgetItemFormController {
     required String amount,
     bool trackable = false,
     int? paymentDay,
+    ExpenseCategory category = ExpenseCategory.utilities,
   }) {
     final nameError = validateRequired(name, 'Name');
     if (nameError != null) {
@@ -90,6 +91,7 @@ class BudgetItemFormController {
           amount: parsedAmount,
           monthKey: monthKey,
           paymentDay: paymentDay ?? 1,
+          category: category,
         ),
       );
       return;
@@ -104,6 +106,7 @@ class BudgetItemFormController {
           monthKey: monthKey,
           isSubscription: true,
           paymentDay: paymentDay ?? 1,
+          category: category,
         ),
       );
       return;
@@ -116,6 +119,7 @@ class BudgetItemFormController {
         amount: parsedAmount,
         monthKey: monthKey,
         trackable: trackable,
+        category: category,
       ),
     );
   }

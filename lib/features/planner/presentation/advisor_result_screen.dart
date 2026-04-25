@@ -194,6 +194,18 @@ class _AdvisorResultScreenState extends State<AdvisorResultScreen>
                     MarkdownBody(
                       data: _insight!,
                       selectable: true,
+                      styleSheet: MarkdownStyleSheet.fromTheme(theme).copyWith(
+                        p: theme.textTheme.bodyMedium,
+                        h1: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
+                        h2: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+                        h3: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
+                        strong: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w700),
+                        blockquoteDecoration: BoxDecoration(
+                          border: Border(
+                            left: BorderSide(color: theme.colorScheme.primary, width: 4),
+                          ),
+                        ),
+                      ),
                     ),
                   ],
                 ),

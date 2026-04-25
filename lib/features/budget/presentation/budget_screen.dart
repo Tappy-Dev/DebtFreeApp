@@ -1,6 +1,11 @@
 import 'package:debt_free_app/core/data/session_financial_repository.dart';
+import 'package:debt_free_app/core/data/financial_repository_extensions.dart';
+import 'package:debt_free_app/core/utils/amount_parser.dart';
+import 'package:debt_free_app/core/utils/bonus_income_helper.dart';
 import 'package:debt_free_app/core/utils/financial_month.dart';
 import 'package:debt_free_app/features/budget/domain/build_budget_snapshot.dart';
+import 'package:debt_free_app/features/simulation/models/expense.dart';
+import 'package:debt_free_app/features/simulation/models/income_source.dart';
 import 'package:debt_free_app/shared/widgets/app_shell_scaffold.dart';
 import 'package:debt_free_app/shared/widgets/empty_state_card.dart';
 import 'package:flutter/material.dart';
@@ -193,9 +198,19 @@ class _BudgetScreenState extends State<BudgetScreen> {
   Widget build(BuildContext context) {
     final snapshot = BuildBudgetSnapshot(_repository)();
     final income = _repository.getIncomeSources();
+    final regularIncome = income.where((item) => !isBonusIncome(item)).toList();
+    final adjustedIncomeById = {
+      for (final item in _repository.getAdjustedIncomeSources()) item.id: item,
+    };
     final bills = _repository.getBills();
     final subscriptions = _repository.getSubscriptions();
-    final expenses = _repository.getExpenses();
+    final allExpenses = _repository.getExpenses();
+    final expenses = allExpenses
+        .where((e) => e.category != ExpenseCategory.savings)
+        .toList();
+    final savings = allExpenses
+        .where((e) => e.category == ExpenseCategory.savings)
+        .toList();
     final mortgages = _repository.getMortgages();
     final currency = NumberFormat.currency(
       locale: 'en_GB',
@@ -336,20 +351,38 @@ class _BudgetScreenState extends State<BudgetScreen> {
             onPressed: _openNewIncomeForm,
           ),
           const SizedBox(height: 8),
-          if (income.isEmpty) ...<Widget>[
+          if (regularIncome.isEmpty) ...<Widget>[
             const EmptyStateCard(title: 'No income sources yet', message: 'Add each income source separately — salary, freelance, rental income, etc.'),
             const SizedBox(height: 8),
           ],
-          for (final item in income) ...<Widget>[
-            _BudgetItemTile(
-              icon: Icons.payments_outlined,
-              iconColor: Colors.green.shade700,
-              name: item.name,
-              primaryValue: '${currency.format(item.monthlyNetAfterSacrifice())}/mo net',
-              secondaryValue: '${currency.format(item.annualGross)}/yr gross',
-              onEdit: () => _openEditIncomeForm(item.id),
-              onDelete: () => _confirmDeleteIncome(item.id, item.name),
-            ),
+          for (final item in regularIncome) ...<Widget>[
+            () {
+              final linkedBonus = _findLinkedBonusForParent(item, income);
+              final bonusNet = linkedBonus == null
+                  ? null
+                  : (adjustedIncomeById[linkedBonus.id]?.amount ??
+                      resolvedMonthlyIncomeNet(linkedBonus, income));
+              final bonusGross = linkedBonus == null
+                  ? null
+                  : linkedBonus.annualGross / 12;
+              return _BudgetItemTile(
+                icon: Icons.payments_outlined,
+                iconColor: Colors.green.shade700,
+                name: item.name,
+                primaryValue:
+                    '${currency.format(adjustedIncomeById[item.id]?.amount ?? item.monthlyNetAfterSacrifice())}/mo net',
+                secondaryValue: '${currency.format(item.annualGross)}/yr gross',
+                bonusGross: bonusGross,
+                bonusNet: bonusNet,
+                onAddBonus:
+                    linkedBonus == null ? () => _promptAddBonus(item) : null,
+                onRemoveBonus: linkedBonus == null
+                    ? null
+                    : () => _removeBonus(linkedBonus, item.name),
+                onEdit: () => _openEditIncomeForm(item.id),
+                onDelete: () => _confirmDeleteIncome(item.id, item.name),
+              );
+            }(),
             const SizedBox(height: 8),
           ],
           const SizedBox(height: 12),
@@ -372,6 +405,7 @@ class _BudgetScreenState extends State<BudgetScreen> {
               iconColor: colorScheme.error,
               name: item.name,
               primaryValue: '${currency.format(item.amount)}/mo',
+              secondaryValue: item.category.displayName,
               onEdit: () => _openEditBillForm(item.id),
               onDelete: () => _confirmDeleteBill(item.id, item.name),
             ),
@@ -413,7 +447,7 @@ class _BudgetScreenState extends State<BudgetScreen> {
           ),
           const SizedBox(height: 8),
           if (expenses.isEmpty) ...<Widget>[
-            const EmptyStateCard(title: 'No expenses yet', message: 'Add your monthly expenses to improve the projection.'),
+            const EmptyStateCard(title: 'No expenses yet', message: 'Add day-to-day spending by category — entertainment, transport, healthcare, and more.'),
             const SizedBox(height: 8),
           ],
           for (final item in expenses) ...<Widget>[
@@ -422,7 +456,34 @@ class _BudgetScreenState extends State<BudgetScreen> {
               iconColor: Colors.orange.shade700,
               name: item.name,
               primaryValue: '${currency.format(item.amount)}/mo',
+              secondaryValue: item.category.displayName,
               badge: item.trackable ? 'Trackable' : null,
+              onEdit: () => _openEditExpenseForm(item.id),
+              onDelete: () => _confirmDeleteExpense(item.id, item.name),
+            ),
+            const SizedBox(height: 8),
+          ],
+          const SizedBox(height: 12),
+          // ── Savings ──
+          _SectionHeader(
+            title: 'Savings',
+            amount: currency.format(snapshot.totalSavings),
+            icon: Icons.savings_outlined,
+            actionLabel: 'Add savings',
+            onPressed: _openNewSavingsForm,
+          ),
+          const SizedBox(height: 8),
+          if (savings.isEmpty) ...<Widget>[
+            const EmptyStateCard(title: 'No savings pots yet', message: 'Add a monthly savings amount — emergency fund, holiday, home deposit — to factor it into your budget.'),
+            const SizedBox(height: 8),
+          ],
+          for (final item in savings) ...<Widget>[
+            _BudgetItemTile(
+              icon: Icons.savings_outlined,
+              iconColor: Colors.teal,
+              name: item.name,
+              primaryValue: '${currency.format(item.amount)}/mo',
+              secondaryValue: 'Savings',
               onEdit: () => _openEditExpenseForm(item.id),
               onDelete: () => _confirmDeleteExpense(item.id, item.name),
             ),
@@ -478,6 +539,10 @@ class _BudgetScreenState extends State<BudgetScreen> {
     context.push('/budget/expense/new');
   }
 
+  Future<void> _openNewSavingsForm() async {
+    context.push('/budget/expense/new?category=savings');
+  }
+
   Future<void> _openEditExpenseForm(String expenseId) async {
     context.push('/budget/expense/$expenseId/edit');
   }
@@ -512,6 +577,134 @@ class _BudgetScreenState extends State<BudgetScreen> {
 
     setState(() {});
     _showSnackBar('Income removed.');
+  }
+
+  Future<void> _promptAddBonus(IncomeSource source) async {
+    final existingBonus =
+        _findLinkedBonusForParent(source, _repository.getIncomeSources());
+    if (existingBonus != null) {
+      _showSnackBar('A bonus has already been added for ${source.name}.');
+      return;
+    }
+
+    final controller = TextEditingController();
+    String? errorText;
+    final monthLabel = _formatMonthKey(_selectedMonth);
+
+    final result = await showDialog<double>(
+      context: context,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (ctx, setDialogState) {
+            return AlertDialog(
+              title: Text('Add bonus to ${source.name}'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'This applies only to $monthLabel and is added on top of '
+                    'the current salary so tax, NI, student loan and '
+                    'salary-sacrifice effects stay aligned.',
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: controller,
+                    autofocus: true,
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
+                    decoration: InputDecoration(
+                      labelText: 'Bonus gross',
+                      prefixText: '£',
+                      errorText: errorText,
+                    ),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text('Cancel'),
+                ),
+                FilledButton(
+                  onPressed: () {
+                    final raw = controller.text.trim();
+                    final parsed = AmountParser.tryParse(raw);
+                    if (parsed == null || parsed <= 0) {
+                      setDialogState(() {
+                        errorText = 'Enter a valid amount greater than 0.';
+                      });
+                      return;
+                    }
+                    if (!AmountParser.hasMaxDecimalPlaces(raw, 2)) {
+                      setDialogState(() {
+                        errorText = 'Use at most 2 decimal places.';
+                      });
+                      return;
+                    }
+                    Navigator.pop(ctx, parsed);
+                  },
+                  child: const Text('Apply bonus'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    if (result == null) return;
+
+    final bonusIncome = IncomeSource(
+      id: '${_selectedMonth}-income-bonus-${DateTime.now().millisecondsSinceEpoch}${bonusParentMarker}${source.id}',
+      name: 'Bonus (${source.name})',
+      annualGross: result * 12,
+      studentLoanPlan: source.studentLoanPlan,
+      monthKey: _selectedMonth,
+    );
+    _repository.saveIncomeSource(bonusIncome);
+    await _repository.waitForPendingWrites();
+    if (!mounted) return;
+
+    setState(() {});
+    _showSnackBar(
+      'Bonus added to ${source.name} for $monthLabel.',
+    );
+  }
+
+  IncomeSource? _findLinkedBonusForParent(
+    IncomeSource parent,
+    List<IncomeSource> allIncome,
+  ) {
+    for (final source in allIncome) {
+      if (!isBonusIncome(source)) {
+        continue;
+      }
+
+      final linkedParentId = parentIncomeIdFromBonusId(source.id);
+      if (linkedParentId != null && linkedParentId == parent.id) {
+        return source;
+      }
+
+      final linkedParentName = parentIncomeNameFromBonusName(source.name);
+      if (linkedParentName != null && linkedParentName == parent.name) {
+        return source;
+      }
+    }
+
+    return null;
+  }
+
+  Future<void> _removeBonus(IncomeSource bonus, String parentName) async {
+    _repository.deleteIncomeSource(bonus.id);
+    await _repository.waitForPendingWrites();
+    if (!mounted) {
+      return;
+    }
+
+    setState(() {});
+    _showSnackBar('Bonus removed from $parentName.');
   }
 
   Future<void> _confirmDeleteExpense(String id, String name) async {
@@ -658,6 +851,10 @@ class _BudgetItemTile extends StatelessWidget {
     this.icon,
     this.iconColor,
     this.badge,
+    this.bonusGross,
+    this.bonusNet,
+    this.onAddBonus,
+    this.onRemoveBonus,
     this.onEdit,
     this.onDelete,
   });
@@ -668,6 +865,10 @@ class _BudgetItemTile extends StatelessWidget {
   final IconData? icon;
   final Color? iconColor;
   final String? badge;
+  final double? bonusGross;
+  final double? bonusNet;
+  final VoidCallback? onAddBonus;
+  final VoidCallback? onRemoveBonus;
   final VoidCallback? onEdit;
   final VoidCallback? onDelete;
 
@@ -675,6 +876,11 @@ class _BudgetItemTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+    final currency = NumberFormat.currency(
+      locale: 'en_GB',
+      symbol: '\u00A3',
+      decimalDigits: 2,
+    );
     return Card(
       elevation: 0,
       shape: RoundedRectangleBorder(
@@ -725,6 +931,86 @@ class _BudgetItemTile extends StatelessWidget {
                         color: colorScheme.primary,
                         fontWeight: FontWeight.w600,
                       )),
+                    ),
+                  ],
+                  if (onAddBonus != null) ...[
+                    const SizedBox(height: 8),
+                    InkWell(
+                      borderRadius: BorderRadius.circular(8),
+                      onTap: onAddBonus,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 6,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.green.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: Colors.green.withValues(alpha: 0.35),
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(
+                              Icons.add_circle_outline,
+                              size: 14,
+                              color: Colors.green,
+                            ),
+                            const SizedBox(width: 6),
+                            Text(
+                              'Add bonus',
+                              style: theme.textTheme.labelMedium?.copyWith(
+                                color: Colors.green,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                  if (bonusGross != null && bonusNet != null) ...[
+                    const SizedBox(height: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 6,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.green.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: Colors.green.withValues(alpha: 0.35),
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              'Bonus added: ${currency.format(bonusGross)} gross • ${currency.format(bonusNet)} net',
+                              style: theme.textTheme.labelMedium?.copyWith(
+                                color: Colors.green,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                          if (onRemoveBonus != null)
+                            InkWell(
+                              borderRadius: BorderRadius.circular(14),
+                              onTap: onRemoveBonus,
+                              child: Padding(
+                                padding: const EdgeInsets.all(4),
+                                child: Icon(
+                                  Icons.close_rounded,
+                                  size: 15,
+                                  color: colorScheme.error.withValues(alpha: 0.9),
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
                     ),
                   ],
                 ],

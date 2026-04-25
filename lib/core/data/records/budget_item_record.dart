@@ -20,6 +20,7 @@ class BudgetItemRecord {
     this.trackable = false,
     this.isSubscription = false,
     this.paymentDay,
+    this.category = 'other',
   });
 
   factory BudgetItemRecord.fromIncomeSource(IncomeSource incomeSource) {
@@ -49,6 +50,7 @@ class BudgetItemRecord {
       trackable: expense.trackable,
       isSubscription: expense.isSubscription,
       paymentDay: expense.paymentDay,
+      category: expense.category.name,
     );
   }
 
@@ -61,6 +63,7 @@ class BudgetItemRecord {
       trackable: (row.data[isSubscriptionColumn] as int?) == 1 ? false : false,
       isSubscription: (row.data[isSubscriptionColumn] as int? ?? 0) == 1,
       paymentDay: row.read<int>(paymentDayColumn),
+      category: row.readNullable<String>(categoryColumn) ?? 'other',
     );
   }
 
@@ -71,6 +74,7 @@ class BudgetItemRecord {
       amount: row.read<double>(amountColumn),
       monthKey: row.read<String>(monthKeyColumn),
       trackable: (row.read<int?>('is_trackable') ?? 0) == 1,
+      category: row.readNullable<String>(categoryColumn) ?? 'other',
     );
   }
 
@@ -115,11 +119,12 @@ class BudgetItemRecord {
   static const String monthKeyColumn = 'month_key';
   static const String isSubscriptionColumn = 'is_subscription';
   static const String paymentDayColumn = 'payment_day';
+  static const String categoryColumn = 'category';
 
   static const String selectColumns =
-      '$idColumn, $nameColumn, $amountColumn, $monthKeyColumn, $isSubscriptionColumn, $paymentDayColumn';
+      '$idColumn, $nameColumn, $amountColumn, $monthKeyColumn, $isSubscriptionColumn, $paymentDayColumn, $categoryColumn';
   static const String selectExpenseColumns =
-      '$idColumn, $nameColumn, $amountColumn, $monthKeyColumn, is_trackable';
+      '$idColumn, $nameColumn, $amountColumn, $monthKeyColumn, is_trackable, $categoryColumn';
   static const String selectIncomeColumns =
       '$idColumn, $nameColumn, $amountColumn, $annualGrossColumn, '
       '$studentLoanPlanColumn, $monthlyPensionSacrificeColumn, '
@@ -128,7 +133,7 @@ class BudgetItemRecord {
       '$monthlyNiableBenefitsColumn, $monthlyStudentLoanableBenefitsColumn, '
       '$monthKeyColumn';
   static const String insertColumns =
-      '($idColumn, $nameColumn, $amountColumn, $monthKeyColumn, is_trackable)';
+      '($idColumn, $nameColumn, $amountColumn, $monthKeyColumn, is_trackable, $categoryColumn)';
   static const String insertIncomeColumns =
       '($idColumn, $nameColumn, $amountColumn, $annualGrossColumn, '
       '$studentLoanPlanColumn, $monthlyPensionSacrificeColumn, '
@@ -152,6 +157,7 @@ class BudgetItemRecord {
   final bool trackable;
   final bool isSubscription;
   final int? paymentDay;
+  final String category;
 
   IncomeSource toIncomeSource() {
     // If annualGross is set use it; otherwise fall back to legacy monthly amount
@@ -184,6 +190,7 @@ class BudgetItemRecord {
       trackable: trackable,
       isSubscription: isSubscription,
       paymentDay: paymentDay,
+      category: ExpenseCategory.fromName(category),
     );
   }
 
@@ -194,6 +201,7 @@ class BudgetItemRecord {
       amount,
       monthKey,
       trackable ? 1 : 0,
+      category,
     ];
   }
 

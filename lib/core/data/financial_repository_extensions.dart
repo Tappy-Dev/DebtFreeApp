@@ -1,4 +1,5 @@
 import 'package:debt_free_app/core/data/financial_repository.dart';
+import 'package:debt_free_app/core/utils/bonus_income_helper.dart';
 import 'package:debt_free_app/features/scenarios/domain/active_scenario_plan.dart';
 import 'package:debt_free_app/features/simulation/models/expense.dart';
 import 'package:debt_free_app/features/simulation/models/income_source.dart';
@@ -13,7 +14,7 @@ extension FinancialRepositoryScenarioPlan on FinancialRepository {
   List<IncomeSource> getAdjustedIncomeSources() {
     final incomeSources = getIncomeSources();
     return incomeSources.map((IncomeSource s) {
-      final adjustedNet = s.monthlyNetAfterSacrifice();
+      final adjustedNet = resolvedMonthlyIncomeNet(s, incomeSources);
       return s.copyWith(overrideMonthlyNet: adjustedNet);
     }).toList();
   }

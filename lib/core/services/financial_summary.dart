@@ -27,6 +27,12 @@ class FinancialSummary {
   final List<MonthlyBudgetSummary> recentTracking;
   final List<PlannerEvent> plannerEvents;
 
+  bool get hasMinimumData =>
+      incomeSources.isNotEmpty &&
+      (debts.isNotEmpty ||
+          mortgages.isNotEmpty ||
+          mortgage != null);
+
   String toPromptText() {
     final buffer = StringBuffer();
 
@@ -106,7 +112,7 @@ class FinancialSummary {
       'Salary sacrifice net cost: £${budgetSnapshot.salarySacrificeNetCost.toStringAsFixed(2)}',
     );
     buffer.writeln(
-      'Remaining cash after ALL obligations (income minus bills minus expenses minus debt payments minus mortgage — this is the true leftover, do NOT subtract debt payments again): £${budgetSnapshot.remainingCash.toStringAsFixed(2)}',
+      'Remaining cash (post all deductions): £${budgetSnapshot.remainingCash.toStringAsFixed(2)}',
     );
 
     buffer.writeln();

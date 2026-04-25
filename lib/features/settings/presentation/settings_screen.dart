@@ -32,10 +32,64 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return Scaffold(
       appBar: AppBar(title: const Text('Settings')),
       body: SafeArea(
-        child: ListView(
-          padding: const EdgeInsets.all(20),
-          children: <Widget>[
-            // ── Finance Settings ──
+        child: ListenableBuilder(
+          listenable: _repository,
+          builder: (context, _) {
+            final currentThemeMode = _repository.themeMode;
+            return ListView(
+              padding: const EdgeInsets.all(20),
+              children: <Widget>[
+                // ── Theme ──
+                _SectionHeader(title: 'Theme'),
+                const SizedBox(height: 10),
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(20),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Icon(Icons.palette_outlined,
+                                color: theme.colorScheme.primary, size: 20),
+                            const SizedBox(width: 8),
+                            Text('App Theme',
+                                style: theme.textTheme.titleMedium),
+                          ],
+                        ),
+                        const SizedBox(height: 14),
+                        SegmentedButton<ThemeMode>(
+                          segments: const [
+                            ButtonSegment(
+                              value: ThemeMode.dark,
+                              icon: Icon(Icons.dark_mode_outlined, size: 18),
+                              label: Text('Dark'),
+                            ),
+                            ButtonSegment(
+                              value: ThemeMode.light,
+                              icon: Icon(Icons.light_mode_outlined, size: 18),
+                              label: Text('Light'),
+                            ),
+                          ],
+                          selected: {currentThemeMode},
+                          onSelectionChanged: (modes) async {
+                            if (modes.isNotEmpty) {
+                              await _repository.setThemeMode(modes.first);
+                            }
+                          },
+                          style: ButtonStyle(
+                            visualDensity: VisualDensity.comfortable,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 24),
+                // ── Finance Settings ──
+                _SectionHeader(title: 'Finance'),
+                const SizedBox(height: 10),
+                // ── Finance Settings ──
             Card(
               child: InkWell(
                 borderRadius: BorderRadius.circular(12),
@@ -406,6 +460,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
             ),
           ],
+            );
+          },
         ),
       ),
     );
@@ -772,5 +828,26 @@ String _developerAccessScenarioDescription(DeveloperAccessScenario scenario) {
       return 'Pretend the trial has ended so paywall, limits, and expiry messaging can be tested.';
     case DeveloperAccessScenario.premium:
       return 'Pretend the user has an active Premium subscription.';
+  }
+}
+
+class _SectionHeader extends StatelessWidget {
+  const _SectionHeader({required this.title});
+  final String title;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.only(left: 4),
+      child: Text(
+        title.toUpperCase(),
+        style: theme.textTheme.labelSmall?.copyWith(
+          color: theme.colorScheme.primary,
+          fontWeight: FontWeight.w800,
+          letterSpacing: 1.2,
+        ),
+      ),
+    );
   }
 }

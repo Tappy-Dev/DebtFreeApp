@@ -14,6 +14,7 @@ import 'package:debt_free_app/features/tracking/models/budget_actual.dart';
 import 'package:debt_free_app/features/tracking/models/budget_actual_entry.dart';
 import 'package:debt_free_app/features/tracking/models/budget_period.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart' show ThemeMode;
 
 class SessionFinancialRepository extends ChangeNotifier
     implements FinancialRepository {
@@ -55,6 +56,8 @@ class SessionFinancialRepository extends ChangeNotifier
   int _financialMonthStartDay = 1;
   bool _developerModeEnabled = false;
   int _developerMonthOffset = 0;
+  ThemeMode _themeMode = ThemeMode.dark;
+  bool _hasSeenWelcome = false;
   final Set<String> _closedMonthKeys = <String>{};
   Future<void> _pendingWrite = Future<void>.value();
 
@@ -87,6 +90,21 @@ class SessionFinancialRepository extends ChangeNotifier
   bool get developerModeEnabled => _developerModeEnabled;
 
   int get developerMonthOffset => _developerMonthOffset;
+
+  ThemeMode get themeMode => _themeMode;
+
+  bool get hasSeenWelcome => _hasSeenWelcome;
+
+  Future<void> markWelcomeSeen() async {
+    _hasSeenWelcome = true;
+    await _database.appSettingsDao.setHasSeenWelcome();
+  }
+
+  Future<void> setThemeMode(ThemeMode mode) async {
+    _themeMode = mode;
+    notifyListeners();
+    await _database.appSettingsDao.setThemeMode(mode);
+  }
 
   Future<void> setDeveloperModeEnabled(bool enabled) async {
     _developerModeEnabled = enabled;
@@ -268,6 +286,8 @@ class SessionFinancialRepository extends ChangeNotifier
       await _database.appSettingsDao.getDeveloperModeEnabled();
     final loadedDeveloperMonthOffset =
       await _database.appSettingsDao.getDeveloperMonthOffset();
+    final loadedThemeMode = await _database.appSettingsDao.getThemeMode();
+    final loadedHasSeenWelcome = await _database.appSettingsDao.getHasSeenWelcome();
 
     // Apply financial month setting early so currentMonthKeyWithStartDay()
     // is correct for the rest of hydrate().
@@ -279,6 +299,8 @@ class SessionFinancialRepository extends ChangeNotifier
     _developerMonthOffset = loadedDeveloperModeEnabled
       ? loadedDeveloperMonthOffset
       : 0;
+    _themeMode = loadedThemeMode;
+    _hasSeenWelcome = loadedHasSeenWelcome;
 
     if (_seedDemoData &&
         loadedDebts.isEmpty &&

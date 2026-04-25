@@ -11,6 +11,7 @@ class MortgageRecord {
     required this.remainingTermMonths,
     required this.overpayment,
     required this.paymentDay,
+    this.dealEndDateMs,
   });
 
   factory MortgageRecord.fromMortgage(Mortgage mortgage) {
@@ -23,10 +24,12 @@ class MortgageRecord {
       remainingTermMonths: mortgage.remainingTermMonths,
       overpayment: mortgage.overpayment,
       paymentDay: mortgage.paymentDay,
+      dealEndDateMs: mortgage.dealEndDate?.millisecondsSinceEpoch,
     );
   }
 
   factory MortgageRecord.fromRow(QueryRow row) {
+    final dealEndMs = row.readNullable<int>(dealEndDateColumn);
     return MortgageRecord(
       id: row.read<String>(idColumn),
       name: row.read<String>(nameColumn),
@@ -36,6 +39,7 @@ class MortgageRecord {
       remainingTermMonths: row.read<int>(remainingTermMonthsColumn),
       overpayment: row.read<double>(overpaymentColumn),
       paymentDay: row.read<int>(paymentDayColumn),
+      dealEndDateMs: dealEndMs,
     );
   }
 
@@ -47,14 +51,17 @@ class MortgageRecord {
   static const String remainingTermMonthsColumn = 'remaining_term_months';
   static const String overpaymentColumn = 'overpayment';
   static const String paymentDayColumn = 'payment_day';
+  static const String dealEndDateColumn = 'deal_end_date';
 
   static const String selectColumns =
       '$idColumn, $nameColumn, $balanceColumn, $annualRateColumn, '
-      '$monthlyPaymentColumn, $remainingTermMonthsColumn, $overpaymentColumn, $paymentDayColumn';
+      '$monthlyPaymentColumn, $remainingTermMonthsColumn, $overpaymentColumn, '
+      '$paymentDayColumn, $dealEndDateColumn';
 
   static const String insertColumns =
       '($idColumn, $nameColumn, $balanceColumn, $annualRateColumn, '
-      '$monthlyPaymentColumn, $remainingTermMonthsColumn, $overpaymentColumn, $paymentDayColumn)';
+      '$monthlyPaymentColumn, $remainingTermMonthsColumn, $overpaymentColumn, '
+      '$paymentDayColumn, $dealEndDateColumn)';
 
   final String id;
   final String name;
@@ -64,6 +71,7 @@ class MortgageRecord {
   final int remainingTermMonths;
   final double overpayment;
   final int paymentDay;
+  final int? dealEndDateMs;
 
   Mortgage toMortgage() {
     return Mortgage(
@@ -75,6 +83,9 @@ class MortgageRecord {
       remainingTermMonths: remainingTermMonths,
       overpayment: overpayment,
       paymentDay: paymentDay,
+      dealEndDate: dealEndDateMs != null
+          ? DateTime.fromMillisecondsSinceEpoch(dealEndDateMs!)
+          : null,
     );
   }
 
@@ -88,6 +99,7 @@ class MortgageRecord {
       remainingTermMonths,
       overpayment,
       paymentDay,
+      dealEndDateMs,
     ];
   }
 }

@@ -275,7 +275,10 @@ class _MortgageScreenState extends State<MortgageScreen> {
                     ),
                   ],
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 12),
+                // ── Deal expiry warning / info ──
+                _buildDealExpiryBanner(context, selectedMortgage),
+                const SizedBox(height: 4),
 
                 // ── Balance banner ──
                 Container(
@@ -358,6 +361,26 @@ class _MortgageScreenState extends State<MortgageScreen> {
                   value: _currencyFormat.format(detail.totalInterest),
                   icon: Icons.trending_up_rounded,
                   color: theme.colorScheme.error,
+                ),
+                if (selectedMortgage.dealEndDate != null) ...[
+                  const SizedBox(height: 10),
+                  _MortgageStatChip(
+                    label: 'Deal Ends',
+                    value: DateFormat('MMM yyyy')
+                        .format(selectedMortgage.dealEndDate!),
+                    icon: Icons.event_outlined,
+                    color: _dealEndColor(context, selectedMortgage),
+                  ),
+                ],
+                const SizedBox(height: 16),
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton.icon(
+                    onPressed: () =>
+                        _showRemortgageDialog(context, selectedMortgage),
+                    icon: const Icon(Icons.swap_horiz_rounded, size: 18),
+                    label: const Text('Remortgage'),
+                  ),
                 ),
               ],
             ),
@@ -573,6 +596,7 @@ class _MortgageScreenState extends State<MortgageScreen> {
     );
     int selectedPaymentDay =
         existing?.paymentDay ?? _repository.financialMonthStartDay;
+    DateTime? selectedDealEndDate = existing?.dealEndDate;
 
     showDialog<void>(
       context: context,
@@ -651,6 +675,54 @@ class _MortgageScreenState extends State<MortgageScreen> {
                       keyboardType: TextInputType.number,
                       decoration: const InputDecoration(
                         labelText: 'Remaining term (months)',
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    // ── Deal end date picker ──
+                    InkWell(
+                      borderRadius: BorderRadius.circular(4),
+                      onTap: () async {
+                        final now = DateTime.now();
+                        final picked = await showDatePicker(
+                          context: context,
+                          initialDate: selectedDealEndDate ??
+                              DateTime(now.year + 2, now.month),
+                          firstDate: DateTime(now.year, now.month),
+                          lastDate: DateTime(now.year + 30),
+                          helpText: 'Select deal end date',
+                        );
+                        if (picked != null) {
+                          setDialogState(() {
+                            selectedDealEndDate =
+                                DateTime(picked.year, picked.month);
+                          });
+                        }
+                      },
+                      child: InputDecorator(
+                        decoration: InputDecoration(
+                          labelText: 'Fixed deal ends (optional)',
+                          suffixIcon: selectedDealEndDate != null
+                              ? IconButton(
+                                  icon: const Icon(Icons.clear, size: 18),
+                                  tooltip: 'Clear',
+                                  onPressed: () => setDialogState(
+                                      () => selectedDealEndDate = null),
+                                )
+                              : const Icon(Icons.calendar_month_outlined,
+                                  size: 18),
+                        ),
+                        child: Text(
+                          selectedDealEndDate != null
+                              ? DateFormat('MMM yyyy')
+                                  .format(selectedDealEndDate!)
+                              : 'Tap to set',
+                          style: selectedDealEndDate != null
+                              ? null
+                              : TextStyle(
+                                  color: Theme.of(context)
+                                      .colorScheme
+                                      .onSurfaceVariant),
+                        ),
                       ),
                     ),
                   ],
@@ -826,6 +898,7 @@ class _MortgageScreenState extends State<MortgageScreen> {
                       monthlyPayment: payment,
                       remainingTermMonths: term,
                       paymentDay: selectedPaymentDay,
+                      dealEndDate: selectedDealEndDate,
                     ));
                     _selectedMortgageId = mortgageId;
                     Navigator.pop(dialogContext);
@@ -871,6 +944,350 @@ class _MortgageScreenState extends State<MortgageScreen> {
     if (years == 0) return '$remainingMonths months';
     if (remainingMonths == 0) return '$years years';
     return '$years years $remainingMonths months';
+  }
+
+  // ── Deal expiry helpers ──────────────────────────────────────────────────
+
+  /// Returns the number of months until the deal ends (0 if already past).
+  int _monthsUntilDealEnd(DateTime dealEnd) {
+    final now = DateTime.now();
+    final months =
+        (dealEnd.year - now.year) * 12 + (dealEnd.month - now.month);
+    return math.max(0, months);
+  }
+
+  Color _dealEndColor(BuildContext context, Mortgage mortgage) {
+    if (mortgage.dealEndDate == null) return Colors.blue;
+    final months = _monthsUntilDealEnd(mortgage.dealEndDate!);
+    if (months <= 1) return Theme.of(context).colorScheme.error;
+    if (months <= 3) return Colors.orange;
+    return Colors.blue;
+  }
+
+  Widget _buildDealExpiryBanner(BuildContext context, Mortgage mortgage) {
+    final dealEnd = mortgage.dealEndDate;
+    final theme = Theme.of(context);
+    if (dealEnd == null) return const SizedBox.shrink();
+
+    final months = _monthsUntilDealEnd(dealEnd);
+    final String message;
+    final Color colour;
+    final IconData icon;
+
+    if (months == 0) {
+      message =
+          'Your fixed deal expired ${DateFormat('MMM yyyy').format(dealEnd)}. '
+          'Time to remortgage!';
+      colour = theme.colorScheme.error;
+      icon = Icons.warning_amber_rounded;
+    } else if (months <= 3) {
+      message =
+          'Your fixed deal ends ${DateFormat('MMM yyyy').format(dealEnd)} '
+          '— $months month${months == 1 ? '' : 's'} away. Start shopping now.';
+      colour = Colors.orange;
+      icon = Icons.schedule_rounded;
+    } else {
+      message =
+          'Fixed deal ends ${DateFormat('MMM yyyy').format(dealEnd)} '
+          '($months months).';
+      colour = Colors.blue;
+      icon = Icons.info_outline_rounded;
+    }
+
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: colour.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: colour.withValues(alpha: 0.3)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, size: 18, color: colour),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(message,
+                style: theme.textTheme.bodySmall?.copyWith(color: colour)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ── Remortgage dialog ────────────────────────────────────────────────────
+
+  /// Calculates an annuity payment: P * r / (1 - (1+r)^-n)
+  double _calcPayment(double balance, double annualRate, int termMonths) {
+    if (balance <= 0 || termMonths <= 0) return 0;
+    if (annualRate <= 0) return balance / termMonths;
+    final r = annualRate / 100 / 12;
+    final denom = 1 - math.pow(1 + r, -termMonths).toDouble();
+    if (denom == 0) return balance / termMonths;
+    return balance * r / denom;
+  }
+
+  void _showRemortgageDialog(BuildContext context, Mortgage current) {
+    // Project balance to deal-end date if known, otherwise use current balance.
+    final now = DateTime.now();
+    final dealEnd = current.dealEndDate;
+    final Mortgage projected;
+    if (dealEnd != null) {
+      final monthsAhead = _monthsUntilDealEnd(dealEnd);
+      projected = monthsAhead > 0
+          ? _projectMortgageForReference(
+              current,
+              DateTime(now.year + monthsAhead ~/ 12,
+                  now.month + monthsAhead % 12))
+          : current;
+    } else {
+      projected = current;
+    }
+
+    final projectedBalance = projected.balance;
+    final balanceController = TextEditingController(
+      text: projectedBalance.toStringAsFixed(2),
+    );
+    final rateController = TextEditingController();
+    final termController = TextEditingController(
+      text: projected.remainingTermMonths.toString(),
+    );
+    // Calculated payment, updated reactively.
+    String calculatedPayment = '—';
+    DateTime? newDealEndDate;
+
+    void updatePayment(
+        void Function(void Function()) setDialogState, String _) {
+      final bal = AmountParser.tryParse(balanceController.text) ?? 0;
+      final rate = double.tryParse(rateController.text.trim());
+      final term = int.tryParse(termController.text.trim());
+      if (rate != null && term != null && bal > 0) {
+        final p = _calcPayment(bal, rate, term);
+        setDialogState(() => calculatedPayment = '£${p.toStringAsFixed(2)}/mo');
+      } else {
+        setDialogState(() => calculatedPayment = '—');
+      }
+    }
+
+    showDialog<void>(
+      context: context,
+      builder: (BuildContext dialogContext) {
+        return StatefulBuilder(
+          builder: (BuildContext ctx,
+              void Function(void Function()) setDialogState) {
+            return AlertDialog(
+              title: Row(
+                children: [
+                  Icon(Icons.swap_horiz_rounded,
+                      color: Theme.of(ctx).colorScheme.primary),
+                  const SizedBox(width: 8),
+                  const Expanded(child: Text('Remortgage')),
+                ],
+              ),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (dealEnd != null) ...[
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(10),
+                        margin: const EdgeInsets.only(bottom: 12),
+                        decoration: BoxDecoration(
+                          color: Theme.of(ctx)
+                              .colorScheme
+                              .primaryContainer
+                              .withValues(alpha: 0.5),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          'Balance projected to ${DateFormat('MMM yyyy').format(dealEnd)}: '
+                          '£${projectedBalance.toStringAsFixed(2)}',
+                          style: Theme.of(ctx).textTheme.bodySmall,
+                        ),
+                      ),
+                    ],
+                    TextField(
+                      controller: balanceController,
+                      keyboardType: const TextInputType.numberWithOptions(
+                          decimal: true),
+                      decoration: const InputDecoration(
+                        labelText: 'New balance',
+                        prefixText: '£',
+                        helperText: 'Pre-filled with projected balance',
+                      ),
+                      onChanged: (v) => updatePayment(setDialogState, v),
+                    ),
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: rateController,
+                      keyboardType: const TextInputType.numberWithOptions(
+                          decimal: true),
+                      decoration: const InputDecoration(
+                        labelText: 'New interest rate (%)',
+                        suffixText: '%',
+                        helperText: 'Enter your new deal rate',
+                      ),
+                      onChanged: (v) => updatePayment(setDialogState, v),
+                    ),
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: termController,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(
+                        labelText: 'New term (months)',
+                        helperText: 'Pre-filled with remaining term',
+                      ),
+                      onChanged: (v) => updatePayment(setDialogState, v),
+                    ),
+                    const SizedBox(height: 12),
+                    // ── Calculated payment banner ──
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 14, vertical: 10),
+                      decoration: BoxDecoration(
+                        color: Theme.of(ctx)
+                            .colorScheme
+                            .secondaryContainer
+                            .withValues(alpha: 0.5),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(Icons.calculate_outlined,
+                              size: 18,
+                              color: Theme.of(ctx).colorScheme.secondary),
+                          const SizedBox(width: 8),
+                          Text('Calculated payment: ',
+                              style: Theme.of(ctx).textTheme.bodySmall),
+                          Text(calculatedPayment,
+                              style: Theme.of(ctx)
+                                  .textTheme
+                                  .bodySmall
+                                  ?.copyWith(fontWeight: FontWeight.bold)),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    // ── New deal end date ──
+                    InkWell(
+                      borderRadius: BorderRadius.circular(4),
+                      onTap: () async {
+                        final n = DateTime.now();
+                        final picked = await showDatePicker(
+                          context: ctx,
+                          initialDate: newDealEndDate ??
+                              DateTime(n.year + 2, n.month),
+                          firstDate: DateTime(n.year, n.month),
+                          lastDate: DateTime(n.year + 30),
+                          helpText: 'New deal end date (optional)',
+                        );
+                        if (picked != null) {
+                          setDialogState(() {
+                            newDealEndDate =
+                                DateTime(picked.year, picked.month);
+                          });
+                        }
+                      },
+                      child: InputDecorator(
+                        decoration: InputDecoration(
+                          labelText: 'New deal end date (optional)',
+                          suffixIcon: newDealEndDate != null
+                              ? IconButton(
+                                  icon: const Icon(Icons.clear, size: 18),
+                                  tooltip: 'Clear',
+                                  onPressed: () => setDialogState(
+                                      () => newDealEndDate = null),
+                                )
+                              : const Icon(Icons.calendar_month_outlined,
+                                  size: 18),
+                        ),
+                        child: Text(
+                          newDealEndDate != null
+                              ? DateFormat('MMM yyyy').format(newDealEndDate!)
+                              : 'Tap to set',
+                          style: newDealEndDate != null
+                              ? null
+                              : TextStyle(
+                                  color: Theme.of(ctx)
+                                      .colorScheme
+                                      .onSurfaceVariant),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(dialogContext),
+                  child: const Text('Cancel'),
+                ),
+                FilledButton(
+                  onPressed: () {
+                    final bal =
+                        AmountParser.tryParse(balanceController.text);
+                    final rate =
+                        double.tryParse(rateController.text.trim());
+                    final term = int.tryParse(termController.text.trim());
+                    final messenger = ScaffoldMessenger.of(this.context);
+
+                    if (bal == null || bal <= 0) {
+                      messenger
+                        ..hideCurrentSnackBar()
+                        ..showSnackBar(const SnackBar(
+                            content: Text('Balance must be greater than 0.')));
+                      return;
+                    }
+                    if (rate == null || rate < 0 || rate > 100) {
+                      messenger
+                        ..hideCurrentSnackBar()
+                        ..showSnackBar(const SnackBar(
+                            content: Text(
+                                'Rate must be between 0 and 100.')));
+                      return;
+                    }
+                    if (term == null || term <= 0) {
+                      messenger
+                        ..hideCurrentSnackBar()
+                        ..showSnackBar(const SnackBar(
+                            content: Text('Term must be greater than 0.')));
+                      return;
+                    }
+
+                    final payment = _calcPayment(bal, rate, term);
+                    _repository.saveMortgage(
+                      current.copyWith(
+                        balance: bal,
+                        annualRate: rate,
+                        monthlyPayment: payment,
+                        remainingTermMonths: term,
+                        overpayment: 0,
+                        dealEndDate: newDealEndDate,
+                      ),
+                    );
+                    Navigator.pop(dialogContext);
+                    ScaffoldMessenger.of(this.context)
+                      ..hideCurrentSnackBar()
+                      ..showSnackBar(SnackBar(
+                        content: Text(
+                            'Remortgage applied — new payment '
+                            '£${payment.toStringAsFixed(2)}/mo at $rate%'),
+                        duration: const Duration(seconds: 3),
+                      ));
+                  },
+                  child: const Text('Apply Remortgage'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
   }
 }
 

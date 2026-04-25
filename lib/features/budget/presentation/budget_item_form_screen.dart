@@ -2,6 +2,7 @@ import 'package:debt_free_app/core/data/session_financial_repository.dart';
 import 'package:debt_free_app/core/utils/amount_parser.dart';
 import 'package:debt_free_app/core/utils/uk_tax_calculator.dart';
 import 'package:debt_free_app/features/budget/application/budget_item_form_controller.dart';
+import 'package:debt_free_app/features/simulation/models/expense.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
@@ -11,10 +12,13 @@ class BudgetItemFormScreen extends StatefulWidget {
     super.key,
     required this.type,
     this.itemId,
+    this.initialCategory,
   });
 
   final BudgetItemType type;
   final String? itemId;
+  /// Pre-selects a category when opening the form for a new item.
+  final ExpenseCategory? initialCategory;
 
   @override
   State<BudgetItemFormScreen> createState() => _BudgetItemFormScreenState();
@@ -37,12 +41,21 @@ class _BudgetItemFormScreenState extends State<BudgetItemFormScreen> {
   bool _trackable = false;
   int _paymentDay = 1;
   bool _guidanceExpanded = false;
+  // Default adjusted in initState based on item type.
+  ExpenseCategory _selectedCategory = ExpenseCategory.utilities;
 
   @override
   void initState() {
     super.initState();
     _controller = BudgetItemFormController(_repository);
     _paymentDay = _repository.financialMonthStartDay;
+    // Set a sensible default before seeding (seeding will override if editing).
+    final isBillLike = widget.type == BudgetItemType.bill ||
+        widget.type == BudgetItemType.subscription;
+    _selectedCategory = widget.initialCategory ??
+        (isBillLike
+            ? ExpenseCategory.utilities
+            : ExpenseCategory.entertainment);
     _seedExistingValues();
   }
 
@@ -177,6 +190,33 @@ class _BudgetItemFormScreenState extends State<BudgetItemFormScreen> {
                     return _controller.validateAmount(value, _amountLabel);
                   },
                 ),
+                if (!_isIncome && !_isSubscription) ...<Widget>[
+                  const SizedBox(height: 16),
+                  DropdownButtonFormField<ExpenseCategory>(
+                    value: _selectedCategory,
+                    decoration: const InputDecoration(
+                      labelText: 'Category',
+                      border: OutlineInputBorder(),
+                    ),
+                    items: ExpenseCategory.values
+                        .where((c) => _isBill
+                            ? c.isBillCategory
+                            : c.isExpenseCategory)
+                        .map(
+                          (c) => DropdownMenuItem(
+                            value: c,
+                            child: Text(c.displayName),
+                          ),
+                        )
+                        .toList(),
+                    onChanged: (v) => setState(
+                      () => _selectedCategory = v ??
+                          (_isBill
+                              ? ExpenseCategory.utilities
+                              : ExpenseCategory.entertainment),
+                    ),
+                  ),
+                ],
                 if (_isBill || _isSubscription) ...<Widget>[
                   const SizedBox(height: 16),
                   DropdownButtonFormField<int>(
@@ -485,6 +525,32 @@ class _BudgetItemFormScreenState extends State<BudgetItemFormScreen> {
             const Divider(),
             _breakdownRow('Net take-home', breakdown.monthlyNet, currency,
                 bold: true),
+            const SizedBox(height: 10),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(
+                  Icons.info_outline_rounded,
+                  size: 14,
+                  color: Theme.of(context).colorScheme.onSurface.withOpacity(0.45),
+                ),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    'Figures are estimates based on standard monthly PAYE. '
+                    'Your payslip may differ by a few pence because payroll '
+                    'software uses cumulative tax calculations that adjust '
+                    'across tax periods.',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: Theme.of(context)
+                              .colorScheme
+                              .onSurface
+                              .withOpacity(0.45),
+                        ),
+                  ),
+                ),
+              ],
+            ),
           ],
         ),
       ),
@@ -547,6 +613,9 @@ class _BudgetItemFormScreenState extends State<BudgetItemFormScreen> {
         _nameController.text = item.name;
         _amountController.text = item.amount.toStringAsFixed(2);
         _trackable = item.trackable;
+        _selectedCategory = item.category.isExpenseCategory
+            ? item.category
+            : ExpenseCategory.entertainment;
         return;
       }
     }
@@ -559,6 +628,9 @@ class _BudgetItemFormScreenState extends State<BudgetItemFormScreen> {
         _nameController.text = item.name;
         _amountController.text = item.amount.toStringAsFixed(2);
         _paymentDay = item.paymentDay ?? _repository.financialMonthStartDay;
+        _selectedCategory = item.category.isBillCategory
+            ? item.category
+            : ExpenseCategory.utilities;
         return;
       }
     }
@@ -640,6 +712,7 @@ class _BudgetItemFormScreenState extends State<BudgetItemFormScreen> {
           amount: _amountController.text,
           trackable: _trackable,
           paymentDay: _isBill || _isSubscription ? _paymentDay : null,
+          category: _selectedCategory,
         );
       } on ArgumentError catch (e) {
         if (!mounted) return;

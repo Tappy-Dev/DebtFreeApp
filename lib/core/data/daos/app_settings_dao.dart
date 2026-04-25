@@ -1,6 +1,7 @@
 import 'package:debt_free_app/core/data/drift_financial_database.dart';
 import 'package:debt_free_app/core/data/drift_schema.dart';
 import 'package:drift/drift.dart';
+import 'package:flutter/material.dart';
 
 class AppSettingsDao {
   const AppSettingsDao(this._database);
@@ -80,5 +81,38 @@ class AppSettingsDao {
 
   Future<void> setDeveloperAccessScenario(String scenario) async {
     await setStringSetting(_keyDeveloperAccessScenario, scenario);
+  }
+
+  static const String _keyThemeMode = 'theme_mode';
+
+  Future<ThemeMode> getThemeMode() async {
+    final value = await getStringSetting(_keyThemeMode);
+    switch (value) {
+      case 'light':
+        return ThemeMode.light;
+      case 'dark':
+        return ThemeMode.dark;
+      default:
+        return ThemeMode.dark;
+    }
+  }
+
+  Future<void> setThemeMode(ThemeMode mode) async {
+    final value = switch (mode) {
+      ThemeMode.light => 'light',
+      ThemeMode.dark => 'dark',
+      ThemeMode.system => 'system',
+    };
+    await setStringSetting(_keyThemeMode, value);
+  }
+
+  static const String _keyHasSeenWelcome = 'has_seen_welcome';
+
+  Future<bool> getHasSeenWelcome() async {
+    return (await getStringSetting(_keyHasSeenWelcome)) == 'true';
+  }
+
+  Future<void> setHasSeenWelcome() async {
+    await setStringSetting(_keyHasSeenWelcome, 'true');
   }
 }

@@ -36,7 +36,7 @@ class DriftFinancialDatabase extends GeneratedDatabase {
   late final AppSettingsDao appSettingsDao = AppSettingsDao(this);
 
   @override
-  int get schemaVersion => 20;
+  int get schemaVersion => 23;
 
   @override
   Iterable<TableInfo> get allTables => const <TableInfo>[];
@@ -235,6 +235,27 @@ class DriftFinancialDatabase extends GeneratedDatabase {
             DriftSchema.mortgageTable,
             'payment_day',
             DriftSchema.addMortgagePaymentDayColumn,
+          );
+        }
+        if (from < 21) {
+          await _ensureColumnExists(
+            DriftSchema.expensesTable,
+            'category',
+            DriftSchema.addCategoryToExpenses,
+          );
+        }
+        if (from < 22) {
+          await _ensureColumnExists(
+            DriftSchema.billsTable,
+            'category',
+            DriftSchema.addCategoryToBills,
+          );
+        }
+        if (from < 23) {
+          await _ensureColumnExists(
+            DriftSchema.mortgageTable,
+            'deal_end_date',
+            DriftSchema.addMortgageDealEndDateColumn,
           );
         }
       },

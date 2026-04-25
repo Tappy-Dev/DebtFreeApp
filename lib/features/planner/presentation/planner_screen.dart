@@ -85,7 +85,7 @@ class _PlannerScreenState extends State<PlannerScreen> {
               // ── Analyse button ──
               FilledButton.icon(
                 onPressed:
-                    events.isEmpty || _aiLoading ? null : _analyseWithAi,
+                    events.isEmpty || _aiLoading || !_hasAiData ? null : _analyseWithAi,
                 icon: _aiLoading
                     ? const SizedBox(
                         width: 18,
@@ -142,6 +142,13 @@ class _PlannerScreenState extends State<PlannerScreen> {
                         MarkdownBody(
                           data: _aiInsight!,
                           selectable: true,
+                          styleSheet: MarkdownStyleSheet.fromTheme(Theme.of(context)).copyWith(
+                            p: Theme.of(context).textTheme.bodyMedium,
+                            h1: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
+                            h2: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+                            h3: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
+                            strong: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w700),
+                          ),
                         ),
                       ],
                     ),
@@ -237,10 +244,28 @@ class _PlannerScreenState extends State<PlannerScreen> {
         ),
         const SizedBox(height: 16),
 
-        // Prompt cards
-        for (final prompt in _advisorPrompts) ...[
-          _buildPromptCard(context, prompt),
-          const SizedBox(height: 10),
+        if (!_hasAiData)
+          Row(
+            children: [
+              Icon(Icons.lock_outline_rounded,
+                  size: 18, color: theme.colorScheme.onSurfaceVariant),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Add income and at least one debt to unlock AI insights.',
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ),
+            ],
+          )
+        else ...[
+          // Prompt cards
+          for (final prompt in _advisorPrompts) ...[
+            _buildPromptCard(context, prompt),
+            const SizedBox(height: 10),
+          ],
         ],
       ],
     );
@@ -293,6 +318,12 @@ class _PlannerScreenState extends State<PlannerScreen> {
       ),
     );
   }
+
+  bool get _hasAiData =>
+      _repository.getIncomeSources().isNotEmpty &&
+      (_repository.getDebts().isNotEmpty ||
+          _repository.getMortgages().isNotEmpty ||
+          _repository.getMortgage() != null);
 
   void _openAdvisorResult(_AdvisorPrompt prompt) {
     final summary = _buildFinancialSummary();

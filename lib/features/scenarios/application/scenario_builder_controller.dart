@@ -221,10 +221,10 @@ class ScenarioBuilderController {
   }
 
   double _remainingCash() {
-    final incomeSources = _repository.getIncomeSources();
+    final incomeSources = _repository.getAdjustedIncomeSources();
     final totalIncome = incomeSources.fold<double>(
       0,
-      (double sum, item) => sum + item.monthlyNetAfterSacrifice(),
+      (double sum, item) => sum + item.amount,
     );
     final totalExpenses = _repository
         .getExpenses()

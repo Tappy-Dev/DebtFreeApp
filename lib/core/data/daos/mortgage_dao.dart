@@ -34,7 +34,7 @@ class MortgageDao {
       '''
       INSERT INTO ${DriftSchema.mortgageTable}
         ${MortgageRecord.insertColumns}
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(id) DO UPDATE SET
         name = excluded.name,
         balance = excluded.balance,
@@ -42,7 +42,8 @@ class MortgageDao {
         monthly_payment = excluded.monthly_payment,
         remaining_term_months = excluded.remaining_term_months,
         overpayment = excluded.overpayment,
-        payment_day = excluded.payment_day
+        payment_day = excluded.payment_day,
+        deal_end_date = excluded.deal_end_date
       ''',
       record.toSqlVariables(),
     );

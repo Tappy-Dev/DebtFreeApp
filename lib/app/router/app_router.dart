@@ -1,3 +1,4 @@
+import 'package:debt_free_app/core/data/session_financial_repository.dart';
 import 'package:debt_free_app/features/budget/presentation/budget_screen.dart';
 import 'package:debt_free_app/features/budget/application/budget_item_form_controller.dart';
 import 'package:debt_free_app/features/budget/presentation/budget_item_form_screen.dart';
@@ -9,8 +10,10 @@ import 'package:debt_free_app/features/home/presentation/home_screen.dart';
 import 'package:debt_free_app/features/home/presentation/monthly_summary_screen.dart';
 import 'package:debt_free_app/features/mortgage/presentation/mortgage_screen.dart';
 import 'package:debt_free_app/features/onboarding/presentation/onboarding_screen.dart';
+import 'package:debt_free_app/features/onboarding/presentation/welcome_screen.dart';
 import 'package:debt_free_app/features/salary_sacrifice/presentation/salary_sacrifice_screen.dart';
 import 'package:debt_free_app/features/planner/presentation/planner_screen.dart';
+import 'package:debt_free_app/features/simulation/models/expense.dart';
 import 'package:debt_free_app/features/settings/presentation/settings_screen.dart';
 import 'package:debt_free_app/features/settings/presentation/about_screen.dart';
 import 'package:debt_free_app/features/settings/presentation/finance_settings_screen.dart';
@@ -19,7 +22,19 @@ import 'package:go_router/go_router.dart';
 
 GoRouter buildAppRouter() {
   return GoRouter(
+    redirect: (context, state) {
+      final hasSeenWelcome =
+          SessionFinancialRepository.instance.hasSeenWelcome;
+      if (!hasSeenWelcome && state.matchedLocation != '/welcome') {
+        return '/welcome';
+      }
+      return null;
+    },
     routes: <RouteBase>[
+      GoRoute(
+        path: '/welcome',
+        builder: (context, state) => const WelcomeScreen(),
+      ),
       GoRoute(
         path: '/',
         builder: (context, state) => const HomeScreen(),
@@ -67,9 +82,16 @@ GoRouter buildAppRouter() {
       ),
       GoRoute(
         path: '/budget/expense/new',
-        builder: (context, state) => const BudgetItemFormScreen(
-          type: BudgetItemType.expense,
-        ),
+        builder: (context, state) {
+          final catName = state.uri.queryParameters['category'];
+          final cat = catName != null
+              ? ExpenseCategory.fromName(catName)
+              : null;
+          return BudgetItemFormScreen(
+            type: BudgetItemType.expense,
+            initialCategory: cat,
+          );
+        },
       ),
       GoRoute(
         path: '/budget/expense/:id/edit',

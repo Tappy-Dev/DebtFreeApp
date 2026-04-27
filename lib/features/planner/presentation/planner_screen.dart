@@ -1,5 +1,4 @@
 import 'package:debt_free_app/core/data/session_financial_repository.dart';
-import 'package:debt_free_app/core/services/ai_insight_service.dart';
 import 'package:debt_free_app/core/services/financial_summary.dart';
 import 'package:debt_free_app/core/utils/amount_parser.dart';
 import 'package:debt_free_app/features/budget/domain/build_budget_snapshot.dart';
@@ -9,7 +8,6 @@ import 'package:debt_free_app/features/tracking/domain/build_monthly_budget_summ
 import 'package:debt_free_app/features/tracking/models/monthly_budget_summary.dart';
 import 'package:debt_free_app/shared/widgets/app_shell_scaffold.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:intl/intl.dart';
 
 class PlannerScreen extends StatefulWidget {
@@ -24,10 +22,6 @@ class _PlannerScreenState extends State<PlannerScreen> {
 
   final SessionFinancialRepository _repository =
       SessionFinancialRepository.instance;
-  final AiInsightService _aiService = AiInsightService();
-  String? _aiInsight;
-  bool _aiLoading = false;
-  String? _aiError;
 
 
 
@@ -44,122 +38,55 @@ class _PlannerScreenState extends State<PlannerScreen> {
           body: ListView(
             padding: const EdgeInsets.all(20),
             children: <Widget>[
-              // ── Event list ──
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(20),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: <Widget>[
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              'What-If Events',
-                              style: Theme.of(context).textTheme.titleLarge,
-                            ),
-                          ),
-                          FilledButton.icon(
-                            onPressed: _addEvent,
-                            icon: const Icon(Icons.add, size: 18),
-                            label: const Text('Add Event'),
-                          ),
-                        ],
-                      ),
-                      if (events.isEmpty) ...[
-                        const SizedBox(height: 16),
-                        Text(
-                          'No events yet. Add a what-if event to see how it impacts your finances.',
-                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                color: Theme.of(context).colorScheme.outline,
-                              ),
-                        ),
-                      ] else ...[
-                        const SizedBox(height: 12),
-                        ...events.map((e) => _buildEventTile(e)),
-                      ],
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(height: 16),
+              // ── What-If Events (inactive — kept for future use) ──
+              // Card(
+              //   child: Padding(
+              //     padding: const EdgeInsets.all(20),
+              //     child: Column(
+              //       crossAxisAlignment: CrossAxisAlignment.start,
+              //       children: <Widget>[
+              //         Row(
+              //           children: [
+              //             Expanded(
+              //               child: Text(
+              //                 'What-If Events',
+              //                 style: Theme.of(context).textTheme.titleLarge,
+              //               ),
+              //             ),
+              //             FilledButton.icon(
+              //               onPressed: _addEvent,
+              //               icon: const Icon(Icons.add, size: 18),
+              //               label: const Text('Add Event'),
+              //             ),
+              //           ],
+              //         ),
+              //         if (events.isEmpty) ...[
+              //           const SizedBox(height: 16),
+              //           Text(
+              //             'No events yet. Add a what-if event to see how it impacts your finances.',
+              //             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+              //                   color: Theme.of(context).colorScheme.outline,
+              //                 ),
+              //           ),
+              //         ] else ...[
+              //           const SizedBox(height: 12),
+              //           ...events.map((e) => _buildEventTile(e)),
+              //         ],
+              //       ],
+              //     ),
+              //   ),
+              // ),
+              // const SizedBox(height: 16),
 
-              // ── Analyse button ──
-              FilledButton.icon(
-                onPressed:
-                    events.isEmpty || _aiLoading || !_hasAiData ? null : _analyseWithAi,
-                icon: _aiLoading
-                    ? const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: Colors.white,
-                        ),
-                      )
-                    : const Icon(Icons.auto_awesome, size: 18),
-                label: Text(
-                  _aiLoading ? 'Analysing...' : 'Analyse with AI',
-                ),
-              ),
-              const SizedBox(height: 16),
-
-              // ── AI response ──
-              if (_aiError != null)
-                Card(
-                  color: Theme.of(context).colorScheme.errorContainer,
-                  child: Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Text(
-                      _aiError!,
-                      style: TextStyle(
-                        color: Theme.of(context).colorScheme.onErrorContainer,
-                      ),
-                    ),
-                  ),
-                ),
-
-              if (_aiInsight != null)
-                Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(20),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Icon(
-                              Icons.auto_awesome,
-                              size: 20,
-                              color: Theme.of(context).colorScheme.primary,
-                            ),
-                            const SizedBox(width: 8),
-                            Text(
-                              'AI Analysis',
-                              style: Theme.of(context).textTheme.titleMedium,
-                            ),
-                          ],
-                        ),
-                        const Divider(),
-                        MarkdownBody(
-                          data: _aiInsight!,
-                          selectable: true,
-                          styleSheet: MarkdownStyleSheet.fromTheme(Theme.of(context)).copyWith(
-                            p: Theme.of(context).textTheme.bodyMedium,
-                            h1: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
-                            h2: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
-                            h3: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
-                            strong: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w700),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-
-              const SizedBox(height: 24),
-              Divider(color: Theme.of(context).colorScheme.outlineVariant),
-              const SizedBox(height: 16),
+              // ── Analyse with AI (inactive — kept for future use) ──
+              // FilledButton.icon(
+              //   onPressed: events.isEmpty || !_hasAiData ? null : _analyseWithAi,
+              //   icon: const Icon(Icons.auto_awesome, size: 18),
+              //   label: const Text('Analyse with AI'),
+              // ),
+              // const SizedBox(height: 24),
+              // Divider(color: Theme.of(context).colorScheme.outlineVariant),
+              // const SizedBox(height: 16),
 
               // ── AI Advisor Section ──
               _buildAdvisorSection(context),
@@ -171,17 +98,6 @@ class _PlannerScreenState extends State<PlannerScreen> {
   }
 
   static const List<_AdvisorPrompt> _advisorPrompts = [
-    _AdvisorPrompt(
-      id: 'consolidate',
-      icon: Icons.merge_type_rounded,
-      title: 'Should I consolidate my debts?',
-      subtitle: 'Analyse if a consolidation loan would save me money',
-      question:
-          'Given all my debts, their interest rates, balances and monthly payments — should I consider debt consolidation? '
-          'Compare my current total interest cost vs a typical UK consolidation loan (assume rates between 3-15% depending on credit profile). '
-          'Show me the break-even analysis, total interest comparison, and monthly payment difference. '
-          'Consider any risks and whether my current strategy might actually be better.',
-    ),
     _AdvisorPrompt(
       id: 'repayment_strategy',
       icon: Icons.format_list_numbered_rounded,
@@ -212,16 +128,57 @@ class _PlannerScreenState extends State<PlannerScreen> {
           'How many months would it set back my debt-free date? '
           'What is the maximum I could spend without significant impact?',
     ),
-            _AdvisorPrompt(
-          id: 'how_am_i_doing',
-          icon: Icons.query_stats_rounded,
-          title: 'How am I doing?',
-          subtitle: 'Progress summary, streaks, and watch-outs',
-          question:
-              'How am I doing overall? Give me a clear summary report using my latest tracking trends, '
-              'including spending pattern changes, whether I stayed within available money, and the strongest habit streaks. '
-              'Call out my wins, watch-outs, and short actions for the next 7 days.',
-            ),
+    _AdvisorPrompt(
+      id: 'how_am_i_doing',
+      icon: Icons.query_stats_rounded,
+      title: 'How am I doing?',
+      subtitle: 'Progress summary, streaks, and watch-outs',
+      question:
+          'How am I doing overall? Give me a clear summary report using my latest tracking trends, '
+          'including spending pattern changes, whether I stayed within available money, and the strongest habit streaks. '
+          'Call out my wins, watch-outs, and short actions for the next 7 days.',
+    ),
+    _AdvisorPrompt(
+      id: 'emergency_fund',
+      icon: Icons.savings_outlined,
+      title: 'Should I build an emergency fund first?',
+      subtitle: 'Emergency savings vs paying off debt',
+      question:
+          'I have debts to pay off but no emergency fund. Should I prioritise building a 3-month emergency fund before attacking my debts, '
+          'or should I focus on debt repayment first? '
+          'Consider my interest rates, monthly surplus, and the risk of not having a buffer. '
+          'Give me a clear recommendation with a suggested split of any monthly surplus.',
+    ),
+    _AdvisorPrompt(
+      id: 'overspending',
+      icon: Icons.trending_up_rounded,
+      title: 'Where am I overspending?',
+      subtitle: 'Spot budget categories going over each month',
+      question:
+          'Looking at my tracked actuals vs budgeted amounts — which expense categories am I consistently overspending on? '
+          'Rank them by total overspend. For each one, suggest a realistic action to bring it back in line. '
+          'Also highlight any categories where I am significantly underspending that could free up extra money for debt repayment.',
+    ),
+    _AdvisorPrompt(
+      id: 'income_change',
+      icon: Icons.swap_vert_rounded,
+      title: 'What if my income changed?',
+      subtitle: 'Impact of a pay rise, cut, or job loss on my plan',
+      question:
+          'How would a change in my income affect my debt-free date and monthly budget? '
+          'Show me three scenarios: a 10% pay rise, a 10% pay cut, and losing my income entirely for 3 months. '
+          'For each scenario, tell me which debts are at risk, how many months it shifts my debt-free date, and what I should do first.',
+    ),
+    _AdvisorPrompt(
+      id: 'salary_sacrifice',
+      icon: Icons.work_outline_rounded,
+      title: 'Is my salary sacrifice worth it?',
+      subtitle: 'Pension contributions vs paying off debt',
+      question:
+          'Given my current salary sacrifice pension contributions, debt balances, and interest rates — am I better off increasing pension contributions or directing that money at my debts? '
+          'Compare the long-term benefit of extra pension growth against the guaranteed interest saving of paying down debt faster. '
+          'Factor in any employer matching and give me a clear recommendation.',
+    ),
   ];
 
   Widget _buildAdvisorSection(BuildContext context) {
@@ -234,15 +191,23 @@ class _PlannerScreenState extends State<PlannerScreen> {
             Icon(Icons.psychology_outlined,
                 size: 22, color: theme.colorScheme.primary),
             const SizedBox(width: 8),
-            Text('AI Financial Advisor',
+            Text('AI Budget Assistant',
                 style: theme.textTheme.titleLarge),
           ],
         ),
         const SizedBox(height: 6),
         Text(
-          'Ask AI to analyse your finances and answer specific questions.',
+          'Ask AI to analyse your budget and answer specific questions.',
           style: theme.textTheme.bodyMedium
               ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+        ),
+        const SizedBox(height: 6),
+        Text(
+          'For informational purposes only. Not regulated financial advice.',
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+            fontStyle: FontStyle.italic,
+          ),
         ),
         const SizedBox(height: 16),
 
@@ -514,49 +479,18 @@ class _PlannerScreenState extends State<PlannerScreen> {
   }
 
   Future<void> _analyseWithAi() async {
-    setState(() {
-      _aiLoading = true;
-      _aiError = null;
-      _aiInsight = null;
-    });
-
-    try {
-      final snapshot = BuildBudgetSnapshot(_repository)();
-      final events = _repository.getPlannerEvents();
-      final recentTracking = await _loadRecentTracking();
-
-      final summary = FinancialSummary(
-        debts: _repository.getDebts(),
-        incomeSources: _repository.getIncomeSources(),
-        mortgage: _repository.getMortgage(),
-        mortgages: _repository.getMortgages(),
-        budgetSnapshot: snapshot,
-        recentTracking: recentTracking,
-        plannerEvents: events,
-      );
-
-      final insight = await _aiService.generatePlannerInsight(summary);
-      if (mounted) {
-        setState(() {
-          _aiInsight = insight;
-          _aiLoading = false;
-        });
-      }
-    } on AiInsightException catch (e) {
-      if (mounted) {
-        setState(() {
-          _aiError = e.message;
-          _aiLoading = false;
-        });
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _aiError = 'Unexpected error: $e';
-          _aiLoading = false;
-        });
-      }
-    }
+    final summary = await _buildFinancialSummary();
+    if (!mounted) return;
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => AdvisorResultScreen(
+          title: 'What-If Event Analysis',
+          question: '',
+          summary: summary,
+          usePlannerPrompt: true,
+        ),
+      ),
+    );
   }
 }
 

@@ -9,11 +9,13 @@ class AdvisorResultScreen extends StatefulWidget {
     required this.title,
     required this.question,
     required this.summary,
+    this.usePlannerPrompt = false,
   });
 
   final String title;
   final String question;
   final FinancialSummary summary;
+  final bool usePlannerPrompt;
 
   @override
   State<AdvisorResultScreen> createState() => _AdvisorResultScreenState();
@@ -46,10 +48,12 @@ class _AdvisorResultScreenState extends State<AdvisorResultScreen>
 
   Future<void> _generate() async {
     try {
-      final insight = await _aiService.generateAdvisorInsight(
-        widget.summary,
-        widget.question,
-      );
+      final insight = widget.usePlannerPrompt
+          ? await _aiService.generatePlannerInsight(widget.summary)
+          : await _aiService.generateAdvisorInsight(
+              widget.summary,
+              widget.question,
+            );
       if (mounted) {
         setState(() {
           _insight = insight;

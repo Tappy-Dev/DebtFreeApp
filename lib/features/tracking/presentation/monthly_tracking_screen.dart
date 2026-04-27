@@ -89,7 +89,13 @@ class _MonthlyTrackingScreenState extends State<MonthlyTrackingScreen> {
   }
 
   Future<void> _loadMonth() async {
-    setState(() => _loading = true);
+    // Only show the full loading spinner on first load. For refreshes (when
+    // content is already on screen) we silently update to avoid tearing down
+    // InheritedWidget dependents mid-frame after a dialog dismiss.
+    final isFirstLoad = _summary == null;
+    if (isFirstLoad) {
+      setState(() => _loading = true);
+    }
     final builder = BuildMonthlyBudgetSummary(
       SessionFinancialRepository.instance,
     );
@@ -101,9 +107,18 @@ class _MonthlyTrackingScreenState extends State<MonthlyTrackingScreen> {
     });
   }
 
+  /// Defers [_loadMonth] to the next frame. Use this after any dialog dismiss
+  /// to avoid calling setState while the Navigator is still processing the pop.
+  void _scheduleReload() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _loadMonth();
+    });
+  }
+
   void _previousMonth() {
     if (!_canGoBack) return;
     setState(() {
+      _summary = null;
       _month--;
       if (_month < 1) {
         _month = 12;
@@ -127,6 +142,7 @@ class _MonthlyTrackingScreenState extends State<MonthlyTrackingScreen> {
 
   void _nextMonth() {
     setState(() {
+      _summary = null;
       _month++;
       if (_month > 12) {
         _month = 1;
@@ -149,6 +165,7 @@ class _MonthlyTrackingScreenState extends State<MonthlyTrackingScreen> {
     final summary = _summary;
     if (summary == null) return;
 
+    // ── Step 1: confirm close ──
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -172,12 +189,142 @@ class _MonthlyTrackingScreenState extends State<MonthlyTrackingScreen> {
 
     if (confirmed != true || !mounted) return;
 
+    // ── Step 2: trackable underspend prompt ──
+    double trackableCarry = 0;
+    if (summary.hasTrackableUnderspend) {
+      final underspend = summary.trackableUnderspend;
+      final carry = await showDialog<bool>(
+        context: context,
+        builder: (context) {
+          final theme = Theme.of(context);
+          return AlertDialog(
+            title: const Text('Trackable Expenses Under Budget'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Your trackable expenses came in ${_currency.format(underspend)} under budget this month.',
+                ),
+                const SizedBox(height: 12),
+                _buildCarryBreakdownRows(summary, theme),
+                const SizedBox(height: 16),
+                const Text(
+                  'Would you like to carry this saving forward into next month\'s balance?',
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('No, discard'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text('Yes, carry forward'),
+              ),
+            ],
+          );
+        },
+      );
+      if (!mounted) return;
+      if (carry == true) {
+        trackableCarry = underspend;
+      }
+    }
+
+    // ── Step 3: overall remaining prompt ──
+    double overallCarry = 0;
+    final remainingAfterTrackable =
+        summary.overallActualRemaining + trackableCarry;
+    if (remainingAfterTrackable > 0) {
+      final carry = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Positive Balance Remaining'),
+          content: Text(
+            'After all income, bills, expenses and debt payments, '
+            'you have ${_currency.format(remainingAfterTrackable)} left over this month.\n\n'
+            'Would you like to carry this forward into next month?',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('No, discard'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Yes, carry forward'),
+            ),
+          ],
+        ),
+      );
+      if (!mounted) return;
+      if (carry == true) {
+        overallCarry = remainingAfterTrackable;
+      }
+    }
+
+    // ── Close the period, storing the total carry-forward ──
+    final totalCarry = trackableCarry + overallCarry;
     final closedPeriod = summary.period.copyWith(
       status: BudgetPeriodStatus.closed,
       closedAt: DateTime.now(),
+      carriedForwardBalance: totalCarry,
     );
     await SessionFinancialRepository.instance.saveBudgetPeriod(closedPeriod);
-    _loadMonth();
+
+    // If there's a carry-forward, immediately create/update next month's
+    // period so the balance is visible right away.
+    if (totalCarry > 0) {
+      var nextMonth = summary.period.month + 1;
+      var nextYear = summary.period.year;
+      if (nextMonth > 12) { nextMonth = 1; nextYear++; }
+      final nextPeriodId = BudgetPeriod.buildId(nextYear, nextMonth);
+      final nextPeriod = await SessionFinancialRepository.instance
+          .getBudgetPeriod(nextPeriodId);
+      if (nextPeriod != null) {
+        await SessionFinancialRepository.instance.saveBudgetPeriod(
+          nextPeriod.copyWith(carriedForwardBalance: totalCarry),
+        );
+      }
+      // If next period doesn't exist yet it will pick up the carry when first opened
+      // via BuildMonthlyBudgetSummary.
+    }
+
+    _scheduleReload();
+  }
+
+  /// Build a small breakdown of which trackable items are under budget.
+  Widget _buildCarryBreakdownRows(
+      MonthlyBudgetSummary summary, ThemeData theme) {
+    final underItems = summary.trackableExpenseActuals
+        .where((a) => a.budgeted > a.actual)
+        .toList();
+    if (underItems.isEmpty) return const SizedBox.shrink();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: underItems.map((a) {
+        final saving = a.budgeted - a.actual;
+        return Padding(
+          padding: const EdgeInsets.symmetric(vertical: 2),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Expanded(
+                child: Text(a.categoryName,
+                    style: theme.textTheme.bodySmall),
+              ),
+              Text(
+                '+${_currency.format(saving)}',
+                style: theme.textTheme.bodySmall
+                    ?.copyWith(color: Colors.green),
+              ),
+            ],
+          ),
+        );
+      }).toList(),
+    );
   }
 
   Future<void> _reopenMonth() async {
@@ -212,7 +359,7 @@ class _MonthlyTrackingScreenState extends State<MonthlyTrackingScreen> {
       clearClosedAt: true,
     );
     await SessionFinancialRepository.instance.saveBudgetPeriod(reopenedPeriod);
-    _loadMonth();
+    _scheduleReload();
   }
 
   Future<void> _editActual(BudgetActual actual) async {
@@ -258,7 +405,7 @@ class _MonthlyTrackingScreenState extends State<MonthlyTrackingScreen> {
 
     final updated = actual.copyWith(actual: result);
     await SessionFinancialRepository.instance.saveBudgetActual(updated);
-    _loadMonth();
+    _scheduleReload();
   }
 
   Future<void> _addTrackedIncome(MonthlyBudgetSummary summary) async {
@@ -334,7 +481,7 @@ class _MonthlyTrackingScreenState extends State<MonthlyTrackingScreen> {
     );
 
     await SessionFinancialRepository.instance.saveBudgetActual(newActual);
-    _loadMonth();
+    _scheduleReload();
   }
 
   Future<void> _addTrackedExpense(MonthlyBudgetSummary summary) async {
@@ -411,10 +558,8 @@ class _MonthlyTrackingScreenState extends State<MonthlyTrackingScreen> {
     );
 
     await SessionFinancialRepository.instance.saveBudgetActual(newActual);
-    _loadMonth();
+    _scheduleReload();
   }
-
-
 
   Future<void> _addEntryToTrackable(BudgetActual actual) async {
     final refController = TextEditingController();
@@ -521,7 +666,7 @@ class _MonthlyTrackingScreenState extends State<MonthlyTrackingScreen> {
         .where((e) => e.actualId == actual.id)
         .fold(0.0, (s, e) => s + e.amount);
     await repo.saveBudgetActual(actual.copyWith(actual: sum));
-    _loadMonth();
+    _scheduleReload();
   }
 
   Future<void> _deleteEntry(
@@ -534,12 +679,12 @@ class _MonthlyTrackingScreenState extends State<MonthlyTrackingScreen> {
         .where((e) => e.actualId == actual.id)
         .fold(0.0, (s, e) => s + e.amount);
     await repo.saveBudgetActual(actual.copyWith(actual: sum));
-    _loadMonth();
+    _scheduleReload();
   }
 
   Future<void> _deleteActual(BudgetActual actual) async {
     await SessionFinancialRepository.instance.deleteBudgetActual(actual.id);
-    _loadMonth();
+    _scheduleReload();
   }
 
   @override
@@ -603,6 +748,39 @@ class _MonthlyTrackingScreenState extends State<MonthlyTrackingScreen> {
       children: [
         if (workflowStatus.isActionable) ...[
           _buildWorkflowBanner(workflowStatus),
+          const SizedBox(height: 12),
+        ],
+        // ── Carried Forward Balance ──
+        if (summary.period.carriedForwardBalance > 0) ...[
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            decoration: BoxDecoration(
+              color: Colors.green.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: Colors.green.withValues(alpha: 0.35)),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.savings_outlined, size: 18, color: Colors.green),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'Balance carried forward from last month',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: Colors.green,
+                    ),
+                  ),
+                ),
+                Text(
+                  '+${_currency.format(summary.period.carriedForwardBalance)}',
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: Colors.green,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
+          ),
           const SizedBox(height: 12),
         ],
         // ── Extra Income ──

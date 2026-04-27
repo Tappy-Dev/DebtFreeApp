@@ -181,24 +181,14 @@ class _PlannerScreenState extends State<PlannerScreen> {
           'Consider any risks and whether my current strategy might actually be better.',
     ),
     _AdvisorPrompt(
-      id: 'avalanche_vs_snowball',
-      icon: Icons.compare_arrows_rounded,
-      title: 'Avalanche vs Snowball — which is best for me?',
-      subtitle: 'Compare debt repayment strategies with my actual numbers',
+      id: 'repayment_strategy',
+      icon: Icons.format_list_numbered_rounded,
+      title: 'Suggest Repayment Strategy',
+      subtitle: 'Which debts should I tackle first?',
       question:
-          'Using my actual debt balances, interest rates, and available cash, compare the avalanche method (highest APR first) vs the snowball method (smallest balance first). '
-          'Show me the projected total interest paid and debt-free date for each strategy. '
-          'Which one saves me more money, and which one might keep me more motivated?',
-    ),
-    _AdvisorPrompt(
-      id: 'emergency_fund',
-      icon: Icons.shield_outlined,
-      title: 'Do I need an emergency fund first?',
-      subtitle: 'Balance between saving and paying off debt',
-      question:
-          'Given my income, expenses, debts, and current cash flow — should I build an emergency fund before aggressively paying off debt? '
-          'How much should I have saved as a buffer? '
-          'What is the optimal split between emergency savings and extra debt payments for my situation?',
+          'Based on my actual debt balances, interest rates, and available cash, recommend the order I should pay off my debts. '
+          'For each debt, explain why it should be tackled at that priority. '
+          'Give me a clear ranked list and tell me how much extra I should throw at the top-priority debt each month.',
     ),
     _AdvisorPrompt(
       id: 'mortgage_vs_debt',

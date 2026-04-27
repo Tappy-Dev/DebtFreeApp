@@ -102,11 +102,29 @@ class _HomeScreenState extends State<HomeScreen> {
           ],
           if (hasAnyData) ...<Widget>[
             if (_trackingSummary != null && !_trackingSummary!.period.isClosed) ...<Widget>[
-              _TrackingWorkflowReminderCard(
-                summary: _trackingSummary!,
-                onOpenTracking: () => context.push('/tracking'),
-              ),
-              const SizedBox(height: 16),
+              Builder(builder: (context) {
+                final s = _trackingSummary!;
+                final repo = _repository;
+                final currentKey = repo.currentMonthKeyWithStartDay();
+                final summaryKey = '${s.period.year}-${s.period.month.toString().padLeft(2, '0')}';
+                final status = buildTrackingWorkflowStatus(
+                  summary: s,
+                  now: repo.effectiveNow,
+                  financialMonthStartDay: repo.financialMonthStartDay,
+                  isCurrentPeriod: summaryKey == currentKey,
+                );
+                if (!status.showOnDashboard) return const SizedBox.shrink();
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _TrackingWorkflowReminderCard(
+                      summary: s,
+                      onOpenTracking: () => context.push('/tracking'),
+                    ),
+                    const SizedBox(height: 16),
+                  ],
+                );
+              }),
             ],
             _MonthlySummaryCard(
               snapshot: snapshot,

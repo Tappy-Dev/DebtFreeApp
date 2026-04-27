@@ -85,4 +85,29 @@ class MonthlyBudgetSummary {
   /// Show projected view: income is budgeted but no actuals entered yet.
   /// Without this, unearned income registers as a large deficit.
   bool get isProjectedView => !hasAnyActuals && totalBudgetedIncome > 0;
+
+  /// Total underspend across all trackable expense actuals (positive = under budget).
+  /// Only counts items that were actually tracked (budgeted > 0) and came in under.
+  double get trackableUnderspend {
+    return trackableExpenseActuals.fold(0.0, (sum, a) {
+      final under = a.budgeted - a.actual;
+      return under > 0 ? sum + under : sum;
+    });
+  }
+
+  /// True if any trackable expense ended under-budget (positive balance).
+  bool get hasTrackableUnderspend => trackableUnderspend > 0;
+
+  /// Overall actual remaining = actual income + carried forward - actual bills
+  /// - actual expenses (trackable + extra) - actual debt payments.
+  /// Positive means there is money left over.
+  double get overallActualRemaining =>
+      totalActualIncome +
+      period.carriedForwardBalance -
+      totalActualBills -
+      totalActualExpenses -
+      totalActualDebtPayments;
+
+  /// True if there's a positive overall remaining balance worth carrying forward.
+  bool get hasPositiveActualRemaining => overallActualRemaining > 0;
 }

@@ -39,12 +39,13 @@ class BudgetPeriodsDao {
     return _database.customStatement(
       '''
       INSERT INTO ${DriftSchema.budgetPeriodsTable}
-        (id, year, month, status, notes, closed_at)
-      VALUES (?, ?, ?, ?, ?, ?)
+        (id, year, month, status, notes, closed_at, carried_forward_balance)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(id) DO UPDATE SET
         status = excluded.status,
         notes = excluded.notes,
-        closed_at = excluded.closed_at
+        closed_at = excluded.closed_at,
+        carried_forward_balance = excluded.carried_forward_balance
       ''',
       record.toSqlVariables(),
     );

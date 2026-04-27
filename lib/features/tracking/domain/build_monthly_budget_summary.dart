@@ -23,10 +23,19 @@ class BuildMonthlyBudgetSummary {
     var actuals = await _repository.getBudgetActuals(periodId);
 
     if (period == null) {
+      // Look up the previous month's carried-forward balance.
+      var prevMonth = month - 1;
+      var prevYear = year;
+      if (prevMonth < 1) { prevMonth = 12; prevYear--; }
+      final prevPeriod = await _repository.getBudgetPeriod(
+          BudgetPeriod.buildId(prevYear, prevMonth));
+      final carried = prevPeriod?.carriedForwardBalance ?? 0;
+
       period = BudgetPeriod(
         id: periodId,
         year: year,
         month: month,
+        carriedForwardBalance: carried,
       );
       actuals = _seedActualsFromBudget(
         periodId,

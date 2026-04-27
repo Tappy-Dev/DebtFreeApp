@@ -11,6 +11,7 @@ class BudgetPeriod {
     this.status = BudgetPeriodStatus.open,
     this.notes = '',
     this.closedAt,
+    this.carriedForwardBalance = 0,
   });
 
   final String id;
@@ -19,6 +20,8 @@ class BudgetPeriod {
   final BudgetPeriodStatus status;
   final String notes;
   final DateTime? closedAt;
+  /// Positive surplus carried into the next month.
+  final double carriedForwardBalance;
 
   bool get isOpen => status == BudgetPeriodStatus.open;
   bool get isClosed => status == BudgetPeriodStatus.closed;
@@ -28,6 +31,7 @@ class BudgetPeriod {
     String? notes,
     DateTime? closedAt,
     bool clearClosedAt = false,
+    double? carriedForwardBalance,
   }) {
     return BudgetPeriod(
       id: id,
@@ -36,6 +40,7 @@ class BudgetPeriod {
       status: status ?? this.status,
       notes: notes ?? this.notes,
       closedAt: clearClosedAt ? null : (closedAt ?? this.closedAt),
+      carriedForwardBalance: carriedForwardBalance ?? this.carriedForwardBalance,
     );
   }
 

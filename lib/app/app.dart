@@ -27,7 +27,7 @@ class _DebtFreeAppState extends State<DebtFreeApp> {
     return ListenableBuilder(
       listenable: Listenable.merge([
         SubscriptionService.instance,
-        SessionFinancialRepository.instance,
+        SessionFinancialRepository.instance.themeNotifier,
       ]),
       builder: (context, _) {
         final sub = SubscriptionService.instance;

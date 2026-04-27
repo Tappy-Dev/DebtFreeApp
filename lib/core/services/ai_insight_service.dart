@@ -7,9 +7,9 @@ class AiInsightService {
   AiInsightService();
 
   static const String _modelName = 'gemini-2.5-flash';
-  static const int _scenarioMaxOutputTokens = 900;
-  static const int _plannerMaxOutputTokens = 1100;
-  static const int _advisorMaxOutputTokens = 1200;
+  static const int _scenarioMaxOutputTokens = 4096;
+  static const int _plannerMaxOutputTokens = 4096;
+  static const int _advisorMaxOutputTokens = 4096;
 
   Future<String> generateInsight(FinancialSummary summary) async {
     final prompt = _buildUserPrompt(summary);
@@ -79,10 +79,15 @@ Analyse each what-if event. Then give an overall assessment and revised debt-fre
   static const String _advisorSystemPrompt = '''
 UK personal finance advisor in a debt management app.
 
-Answer the user's specific question: direct answer, supporting reasoning, calculations where relevant, clear recommendation with pros/cons, concrete next steps. Use current UK rates/thresholds where applicable.
+Answer the user's question concisely. Give a direct answer, key reasoning, a clear recommendation, and 2-3 concrete next steps.
 note: remainingCash is already net of all obligations — do NOT subtract debt payments again.
 
-Rules: £GBP; markdown headings; bullet points + short paragraphs; no markdown tables; under 500 words unless detail requested; no specific products; end with a one-line disclaimer that this is guidance, not regulated financial advice.
+STRICT FORMAT RULES:
+- Use £GBP. Use markdown headings (##) and bullet points only. No tables.
+- DO NOT show step-by-step calculations or estimate remaining terms per debt — use the figures provided.
+- Maximum 350 words. If you exceed this, you will be cut off mid-sentence. Stay well under it.
+- No specific product recommendations.
+- End with one short italic disclaimer line: this is guidance, not regulated financial advice.
 ''';
 
   Future<String> generateAdvisorInsight(
@@ -132,7 +137,20 @@ $question
       if (text == null || text.isEmpty) {
         throw AiInsightException('No response received from AI.');
       }
-      final normalizedText = _normalizeResponse(text);
+      // Detect mid-sentence truncation caused by hitting the token limit.
+      final candidate = response.candidates.isNotEmpty ? response.candidates.first : null;
+      final wasMaxTokens = candidate?.finishReason == FinishReason.maxTokens;
+      final trimmed = text.trimRight();
+      final endsAbruptly = wasMaxTokens ||
+          (!trimmed.endsWith('.') &&
+           !trimmed.endsWith('!') &&
+           !trimmed.endsWith('?') &&
+           !trimmed.endsWith('*') &&
+           !trimmed.endsWith(')'));
+      final responseText = endsAbruptly
+          ? '$trimmed\n\n---\n*Response may have been cut short. Try retrying for a complete answer.*'
+          : trimmed;
+      final normalizedText = _normalizeResponse(responseText);
       await usageService.recordRequest(
         requestType: requestType,
         systemPrompt: systemPrompt,

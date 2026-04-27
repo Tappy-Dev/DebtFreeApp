@@ -228,8 +228,13 @@ class DriftSchema {
       month INTEGER NOT NULL,
       status TEXT NOT NULL DEFAULT 'open',
       notes TEXT NOT NULL DEFAULT '',
-      closed_at TEXT
+      closed_at TEXT,
+      carried_forward_balance REAL NOT NULL DEFAULT 0
     )
+  ''';
+
+  static const String addCarriedForwardBalanceToBudgetPeriods = '''
+    ALTER TABLE budget_periods ADD COLUMN carried_forward_balance REAL NOT NULL DEFAULT 0
   ''';
 
   static const String budgetActualsTable = 'budget_actuals';

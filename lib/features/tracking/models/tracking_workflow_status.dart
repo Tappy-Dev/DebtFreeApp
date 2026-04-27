@@ -31,6 +31,12 @@ class TrackingWorkflowStatus {
   final bool canCloseMonth;
 
   bool get isActionable => stage != TrackingWorkflowStage.closed;
+
+  /// Whether this status warrants showing a reminder card on the dashboard.
+  /// Hide it when tracking is simply in progress and the user has already
+  /// logged at least one item — no need to keep nudging them.
+  bool get showOnDashboard =>
+      stage != TrackingWorkflowStage.inProgress || trackableStartedCount == 0;
 }
 
 TrackingWorkflowStatus buildTrackingWorkflowStatus({

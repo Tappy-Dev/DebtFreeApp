@@ -9,6 +9,7 @@ class BudgetPeriodRecord {
     required this.status,
     required this.notes,
     required this.closedAtIso,
+    required this.carriedForwardBalance,
   });
 
   factory BudgetPeriodRecord.fromPeriod(BudgetPeriod period) {
@@ -19,6 +20,7 @@ class BudgetPeriodRecord {
       status: period.status.name,
       notes: period.notes,
       closedAtIso: period.closedAt?.toIso8601String(),
+      carriedForwardBalance: period.carriedForwardBalance,
     );
   }
 
@@ -30,6 +32,7 @@ class BudgetPeriodRecord {
       status: row.read<String>('status'),
       notes: row.read<String>('notes'),
       closedAtIso: row.data['closed_at'] as String?,
+      carriedForwardBalance: (row.data['carried_forward_balance'] as num? ?? 0).toDouble(),
     );
   }
 
@@ -39,6 +42,7 @@ class BudgetPeriodRecord {
   final String status;
   final String notes;
   final String? closedAtIso;
+  final double carriedForwardBalance;
 
   BudgetPeriod toBudgetPeriod() {
     return BudgetPeriod(
@@ -51,10 +55,11 @@ class BudgetPeriodRecord {
       notes: notes,
       closedAt:
           closedAtIso == null ? null : DateTime.parse(closedAtIso!),
+      carriedForwardBalance: carriedForwardBalance,
     );
   }
 
   List<Object?> toSqlVariables() {
-    return <Object?>[id, year, month, status, notes, closedAtIso];
+    return <Object?>[id, year, month, status, notes, closedAtIso, carriedForwardBalance];
   }
 }

@@ -57,6 +57,7 @@ class SessionFinancialRepository extends ChangeNotifier
   bool _developerModeEnabled = false;
   int _developerMonthOffset = 0;
   ThemeMode _themeMode = ThemeMode.dark;
+  final ValueNotifier<ThemeMode> themeNotifier = ValueNotifier<ThemeMode>(ThemeMode.dark);
   bool _hasSeenWelcome = false;
   final Set<String> _closedMonthKeys = <String>{};
   Future<void> _pendingWrite = Future<void>.value();
@@ -102,6 +103,7 @@ class SessionFinancialRepository extends ChangeNotifier
 
   Future<void> setThemeMode(ThemeMode mode) async {
     _themeMode = mode;
+    themeNotifier.value = mode;
     notifyListeners();
     await _database.appSettingsDao.setThemeMode(mode);
   }
@@ -300,6 +302,7 @@ class SessionFinancialRepository extends ChangeNotifier
       ? loadedDeveloperMonthOffset
       : 0;
     _themeMode = loadedThemeMode;
+    themeNotifier.value = loadedThemeMode;
     _hasSeenWelcome = loadedHasSeenWelcome;
 
     if (_seedDemoData &&

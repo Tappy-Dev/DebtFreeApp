@@ -62,12 +62,18 @@ class _BudgetItemFormScreenState extends State<BudgetItemFormScreen> {
   bool get _isIncome => widget.type == BudgetItemType.income;
   bool get _isBill => widget.type == BudgetItemType.bill;
   bool get _isSubscription => widget.type == BudgetItemType.subscription;
+  bool get _isSavings =>
+      !_isIncome &&
+      !_isBill &&
+      !_isSubscription &&
+      _selectedCategory == ExpenseCategory.savings;
 
   String get _title {
     if (_isIncome) return _isEditing ? 'Edit Income' : 'Add Income';
     if (_isBill) return _isEditing ? 'Edit Bill' : 'Add Bill';
     if (_isSubscription)
       return _isEditing ? 'Edit Subscription' : 'Add Subscription';
+    if (_isSavings) return _isEditing ? 'Edit Saving' : 'Add Saving';
     return _isEditing ? 'Edit Expense' : 'Add Expense';
   }
 
@@ -75,6 +81,7 @@ class _BudgetItemFormScreenState extends State<BudgetItemFormScreen> {
     if (_isIncome) return 'Income name';
     if (_isBill) return 'Bill name';
     if (_isSubscription) return 'Subscription name';
+    if (_isSavings) return 'Saving reference';
     return 'Expense name';
   }
 
@@ -190,10 +197,10 @@ class _BudgetItemFormScreenState extends State<BudgetItemFormScreen> {
                     return _controller.validateAmount(value, _amountLabel);
                   },
                 ),
-                if (!_isIncome && !_isSubscription) ...<Widget>[
+                if (!_isIncome && !_isSubscription && !_isSavings) ...<Widget>[
                   const SizedBox(height: 16),
                   DropdownButtonFormField<ExpenseCategory>(
-                    value: _selectedCategory,
+                    initialValue: _selectedCategory,
                     decoration: const InputDecoration(
                       labelText: 'Category',
                       border: OutlineInputBorder(),

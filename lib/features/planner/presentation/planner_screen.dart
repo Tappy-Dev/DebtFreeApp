@@ -20,6 +20,8 @@ class PlannerScreen extends StatefulWidget {
 }
 
 class _PlannerScreenState extends State<PlannerScreen> {
+  static const int _maxTrackingLookbackMonths = 12;
+
   final SessionFinancialRepository _repository =
       SessionFinancialRepository.instance;
   final AiInsightService _aiService = AiInsightService();
@@ -210,6 +212,16 @@ class _PlannerScreenState extends State<PlannerScreen> {
           'How many months would it set back my debt-free date? '
           'What is the maximum I could spend without significant impact?',
     ),
+            _AdvisorPrompt(
+          id: 'how_am_i_doing',
+          icon: Icons.query_stats_rounded,
+          title: 'How am I doing?',
+          subtitle: 'Progress summary, streaks, and watch-outs',
+          question:
+              'How am I doing overall? Give me a clear summary report using my latest tracking trends, '
+              'including spending pattern changes, whether I stayed within available money, and the strongest habit streaks. '
+              'Call out my wins, watch-outs, and short actions for the next 7 days.',
+            ),
   ];
 
   Widget _buildAdvisorSection(BuildContext context) {
@@ -315,8 +327,11 @@ class _PlannerScreenState extends State<PlannerScreen> {
           _repository.getMortgages().isNotEmpty ||
           _repository.getMortgage() != null);
 
-  void _openAdvisorResult(_AdvisorPrompt prompt) {
-    final summary = _buildFinancialSummary();
+  Future<void> _openAdvisorResult(_AdvisorPrompt prompt) async {
+    final summary = await _buildFinancialSummary();
+    if (!mounted) {
+      return;
+    }
     Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (_) => AdvisorResultScreen(
@@ -328,16 +343,35 @@ class _PlannerScreenState extends State<PlannerScreen> {
     );
   }
 
-  FinancialSummary _buildFinancialSummary() {
+  Future<FinancialSummary> _buildFinancialSummary() async {
     final snapshot = BuildBudgetSnapshot(_repository)();
+    final recentTracking = await _loadRecentTracking();
     return FinancialSummary(
       debts: _repository.getDebts(),
       incomeSources: _repository.getIncomeSources(),
       mortgage: _repository.getMortgage(),
       mortgages: _repository.getMortgages(),
       budgetSnapshot: snapshot,
+      recentTracking: recentTracking,
       plannerEvents: _repository.getPlannerEvents(),
     );
+  }
+
+  Future<List<MonthlyBudgetSummary>> _loadRecentTracking() async {
+    final builder = BuildMonthlyBudgetSummary(_repository);
+    final now = DateTime.now();
+    final recentTracking = <MonthlyBudgetSummary>[];
+    for (int i = 0; i < _maxTrackingLookbackMonths; i++) {
+      final date = DateTime(now.year, now.month - i);
+      final summary = await builder.call(
+        year: date.year,
+        month: date.month,
+      );
+      if (summary.actuals.any((a) => a.actual > 0)) {
+        recentTracking.add(summary);
+      }
+    }
+    return recentTracking;
   }
 
   Widget _buildEventTile(PlannerEvent event) {
@@ -489,23 +523,7 @@ class _PlannerScreenState extends State<PlannerScreen> {
     try {
       final snapshot = BuildBudgetSnapshot(_repository)();
       final events = _repository.getPlannerEvents();
-
-      // Load recent tracking
-      List<MonthlyBudgetSummary> recentTracking = [];
-      try {
-        final builder = BuildMonthlyBudgetSummary(_repository);
-        final now = DateTime.now();
-        for (int i = 0; i < 3; i++) {
-          final date = DateTime(now.year, now.month - i);
-          final summary = await builder.call(
-            year: date.year,
-            month: date.month,
-          );
-          if (summary.actuals.any((a) => a.actual > 0)) {
-            recentTracking.add(summary);
-          }
-        }
-      } catch (_) {}
+      final recentTracking = await _loadRecentTracking();
 
       final summary = FinancialSummary(
         debts: _repository.getDebts(),

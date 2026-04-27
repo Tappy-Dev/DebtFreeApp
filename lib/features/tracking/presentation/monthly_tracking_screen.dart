@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:debt_free_app/core/data/session_financial_repository.dart';
+import 'package:debt_free_app/features/simulation/models/expense.dart';
 import 'package:debt_free_app/core/utils/amount_parser.dart';
 import 'package:debt_free_app/core/utils/financial_month.dart';
 import 'package:debt_free_app/features/tracking/domain/build_monthly_budget_summary.dart';
@@ -238,30 +239,37 @@ class _MonthlyTrackingScreenState extends State<MonthlyTrackingScreen> {
     final remainingAfterTrackable =
         summary.overallActualRemaining + trackableCarry;
     if (remainingAfterTrackable > 0) {
-      final carry = await showDialog<bool>(
+      final choice = await showDialog<_SurplusChoice>(
         context: context,
         builder: (context) => AlertDialog(
           title: const Text('Positive Balance Remaining'),
           content: Text(
             'After all income, bills, expenses and debt payments, '
             'you have ${_currency.format(remainingAfterTrackable)} left over this month.\n\n'
-            'Would you like to carry this forward into next month?',
+            'What would you like to do with it?',
           ),
           actions: [
             TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('No, discard'),
+              onPressed: () => Navigator.pop(context, _SurplusChoice.discard),
+              child: const Text('Discard'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(context, _SurplusChoice.addToSavings),
+              child: const Text('Add to savings'),
             ),
             FilledButton(
-              onPressed: () => Navigator.pop(context, true),
-              child: const Text('Yes, carry forward'),
+              onPressed: () => Navigator.pop(context, _SurplusChoice.carryForward),
+              child: const Text('Carry forward'),
             ),
           ],
         ),
       );
       if (!mounted) return;
-      if (carry == true) {
+      if (choice == _SurplusChoice.carryForward) {
         overallCarry = remainingAfterTrackable;
+      } else if (choice == _SurplusChoice.addToSavings) {
+        await _addSurplusToSavings(remainingAfterTrackable, summary.period.month, summary.period.year);
+        if (!mounted) return;
       }
     }
 
@@ -324,6 +332,37 @@ class _MonthlyTrackingScreenState extends State<MonthlyTrackingScreen> {
           ),
         );
       }).toList(),
+    );
+  }
+
+  Future<void> _addSurplusToSavings(
+      double amount, int month, int year) async {
+    final repo = SessionFinancialRepository.instance;
+    // Build next month's key for the savings entry
+    var nextMonth = month + 1;
+    var nextYear = year;
+    if (nextMonth > 12) {
+      nextMonth = 1;
+      nextYear++;
+    }
+    final monthKey = '$nextYear-${nextMonth.toString().padLeft(2, '0')}';
+    final id = '$monthKey-expense-monthly-surplus-${DateTime.now().millisecondsSinceEpoch}';
+    final expense = Expense(
+      id: id,
+      name: 'Monthly surplus',
+      amount: amount,
+      monthKey: monthKey,
+      category: ExpenseCategory.savings,
+      trackable: true,
+    );
+    repo.saveExpense(expense);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          '${_currency.format(amount)} added to savings for next month.',
+        ),
+      ),
     );
   }
 
@@ -1400,3 +1439,5 @@ class _MonthlyTrackingScreenState extends State<MonthlyTrackingScreen> {
   }
 
 }
+
+enum _SurplusChoice { discard, carryForward, addToSavings }

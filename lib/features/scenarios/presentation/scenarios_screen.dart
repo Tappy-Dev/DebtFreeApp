@@ -25,6 +25,8 @@ class ScenariosScreen extends StatefulWidget {
 }
 
 class _ScenariosScreenState extends State<ScenariosScreen> {
+  static const int _maxTrackingLookbackMonths = 12;
+
   late final SessionFinancialRepository _repository;
   late final ScenarioBuilderController _controller;
   late final TextEditingController _incomeIncreaseController;
@@ -398,22 +400,7 @@ class _ScenariosScreenState extends State<ScenariosScreen> {
 
     try {
       final budgetSnapshot = BuildBudgetSnapshot(_repository)();
-
-      // Load the last 3 months of tracking data for the AI
-      final trackingBuilder = BuildMonthlyBudgetSummary(_repository);
-      final now = DateTime.now();
-      final recentTracking = <MonthlyBudgetSummary>[];
-      for (int i = 0; i < 3; i++) {
-        final date = DateTime(now.year, now.month - i);
-        final summary = await trackingBuilder(
-          year: date.year,
-          month: date.month,
-        );
-        // Only include months with at least one actual entered
-        if (summary.actuals.any((a) => a.actual > 0)) {
-          recentTracking.add(summary);
-        }
-      }
+      final recentTracking = await _loadRecentTracking();
 
       final summary = FinancialSummary(
         debts: _repository.getDebts(),
@@ -446,6 +433,25 @@ class _ScenariosScreenState extends State<ScenariosScreen> {
         });
       }
     }
+  }
+
+  Future<List<MonthlyBudgetSummary>> _loadRecentTracking() async {
+    final builder = BuildMonthlyBudgetSummary(_repository);
+    final now = DateTime.now();
+    final recentTracking = <MonthlyBudgetSummary>[];
+
+    for (int i = 0; i < _maxTrackingLookbackMonths; i++) {
+      final date = DateTime(now.year, now.month - i);
+      final summary = await builder(
+        year: date.year,
+        month: date.month,
+      );
+      if (summary.actuals.any((a) => a.actual > 0)) {
+        recentTracking.add(summary);
+      }
+    }
+
+    return recentTracking;
   }
 
   void _removeAdjustment(ChangeType type) {

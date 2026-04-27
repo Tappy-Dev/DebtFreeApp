@@ -578,7 +578,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       const SizedBox(height: 14),
                       // ── Severity ──
                       DropdownButtonFormField<String>(
-                        value: severity,
+                        initialValue: severity,
                         decoration: const InputDecoration(
                           labelText: 'Severity',
                           border: OutlineInputBorder(),
@@ -619,7 +619,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       const SizedBox(height: 14),
                       // ── Priority ──
                       DropdownButtonFormField<String>(
-                        value: priority,
+                        initialValue: priority,
                         decoration: const InputDecoration(
                           labelText: 'Priority',
                           border: OutlineInputBorder(),

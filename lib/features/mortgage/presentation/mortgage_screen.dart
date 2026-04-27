@@ -221,7 +221,7 @@ class _MortgageScreenState extends State<MortgageScreen> {
       children: <Widget>[
         if (mortgages.length > 1) ...[
           DropdownButtonFormField<String>(
-            value: selectedMortgage.id,
+            initialValue: selectedMortgage.id,
             decoration: const InputDecoration(
               labelText: 'Selected mortgage',
               border: OutlineInputBorder(),

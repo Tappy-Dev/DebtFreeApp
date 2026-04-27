@@ -4,6 +4,7 @@ import 'package:debt_free_app/features/simulation/models/debt_account.dart';
 import 'package:debt_free_app/features/simulation/models/income_source.dart';
 import 'package:debt_free_app/features/simulation/models/mortgage.dart';
 import 'package:debt_free_app/features/scenarios/domain/scenario_overview.dart';
+import 'package:debt_free_app/features/tracking/models/budget_actual.dart';
 import 'package:debt_free_app/features/tracking/models/monthly_budget_summary.dart';
 
 class FinancialSummary {
@@ -247,6 +248,8 @@ class FinancialSummary {
           }
         }
       }
+
+      _appendTrackingSignals(buffer);
     }
 
     if (plannerEvents.isNotEmpty) {
@@ -275,4 +278,201 @@ class FinancialSummary {
     ];
     return names[month];
   }
+
+  void _appendTrackingSignals(StringBuffer buffer) {
+    final months = recentTracking
+        .where((month) => month.hasAnyActuals)
+        .toList(growable: false)
+      ..sort(
+        (a, b) =>
+            (b.period.year * 100 + b.period.month)
+                .compareTo(a.period.year * 100 + a.period.month),
+      );
+
+    if (months.isEmpty) {
+      return;
+    }
+
+    final withinAvailable = months
+        .where((month) => month.overallActualRemaining >= 0)
+        .toList(growable: false);
+    final latest = months.first;
+    final ratio = withinAvailable.length / months.length;
+    final status = ratio >= 0.75 && latest.overallActualRemaining >= 0
+        ? 'On track'
+        : (ratio >= 0.5 ? 'Slightly off track' : 'At risk');
+
+    buffer.writeln();
+    buffer.writeln('=== TRACKING COACHING SIGNALS ===');
+    buffer.writeln('How-am-I-doing status: $status');
+    buffer.writeln(
+      'Months within available money: ${withinAvailable.length}/${months.length}',
+    );
+
+    if (withinAvailable.isNotEmpty) {
+      final labels = withinAvailable
+          .map(
+            (month) =>
+                '${_monthName(month.period.month)} ${month.period.year}',
+          )
+          .join(', ');
+      buffer.writeln('Within available money months: $labels');
+    }
+
+    var currentOnTrackStreak = 0;
+    for (final month in months) {
+      if (month.overallActualRemaining >= 0) {
+        currentOnTrackStreak++;
+      } else {
+        break;
+      }
+    }
+    buffer.writeln('Current on-track streak: $currentOnTrackStreak month(s)');
+
+    final categoryStreaks = _expenseCategoryStreaks(months);
+    if (categoryStreaks.isNotEmpty) {
+      categoryStreaks.sort((a, b) => b.streakMonths.compareTo(a.streakMonths));
+      final best = categoryStreaks.first;
+      buffer.writeln(
+        'Best budget streak: ${best.categoryName} under budget for ${best.streakMonths} month(s)',
+      );
+    }
+
+    final changes = _monthOnMonthSpendChanges(months);
+    if (changes.isNotEmpty) {
+      buffer.writeln('Top month-on-month spend changes:');
+      for (final change in changes.take(3)) {
+        final direction = change.percentChange >= 0 ? 'up' : 'down';
+        final pct = change.percentChange.abs().toStringAsFixed(1);
+        buffer.writeln(
+          '- ${change.categoryName}: $direction $pct% '
+          '(£${change.previous.toStringAsFixed(2)} -> £${change.current.toStringAsFixed(2)})',
+        );
+      }
+    }
+  }
+
+  List<_CategoryStreak> _expenseCategoryStreaks(
+    List<MonthlyBudgetSummary> months,
+  ) {
+    final streakByCategory = <String, _CategoryStreak>{};
+
+    for (final month in months) {
+      final monthTrackableExpenses = month.trackableExpenseActuals;
+      for (final actual in monthTrackableExpenses) {
+        final existing = streakByCategory[actual.categoryName];
+        final isUnderBudget = actual.actual <= actual.budgeted;
+        if (existing == null) {
+          streakByCategory[actual.categoryName] = _CategoryStreak(
+            categoryName: actual.categoryName,
+            streakMonths: isUnderBudget ? 1 : 0,
+          );
+          continue;
+        }
+
+        if (existing.broken || !isUnderBudget) {
+          streakByCategory[actual.categoryName] = existing.copyWith(broken: true);
+          continue;
+        }
+
+        streakByCategory[actual.categoryName] = existing.copyWith(
+          streakMonths: existing.streakMonths + 1,
+        );
+      }
+    }
+
+    return streakByCategory.values
+        .where((streak) => streak.streakMonths > 0)
+        .toList(growable: false);
+  }
+
+  List<_SpendChange> _monthOnMonthSpendChanges(
+    List<MonthlyBudgetSummary> months,
+  ) {
+    if (months.length < 2) {
+      return const <_SpendChange>[];
+    }
+
+    final currentByCategory = _spendByCategory(months[0]);
+    final previousByCategory = _spendByCategory(months[1]);
+    final changes = <_SpendChange>[];
+
+    for (final entry in currentByCategory.entries) {
+      final previous = previousByCategory[entry.key] ?? 0;
+      if (previous <= 0) {
+        continue;
+      }
+      final current = entry.value;
+      final delta = current - previous;
+      if (delta.abs() < 0.01) {
+        continue;
+      }
+      changes.add(
+        _SpendChange(
+          categoryName: entry.key,
+          current: current,
+          previous: previous,
+          percentChange: (delta / previous) * 100,
+        ),
+      );
+    }
+
+    changes.sort(
+      (a, b) => b.percentChange.abs().compareTo(a.percentChange.abs()),
+    );
+    return changes;
+  }
+
+  Map<String, double> _spendByCategory(MonthlyBudgetSummary month) {
+    final totals = <String, double>{};
+    for (final actual in month.actuals) {
+      if (actual.categoryType != ActualCategoryType.expense &&
+          actual.categoryType != ActualCategoryType.bill) {
+        continue;
+      }
+      totals.update(
+        actual.categoryName,
+        (value) => value + actual.actual,
+        ifAbsent: () => actual.actual,
+      );
+    }
+    return totals;
+  }
+}
+
+class _CategoryStreak {
+  const _CategoryStreak({
+    required this.categoryName,
+    required this.streakMonths,
+    this.broken = false,
+  });
+
+  final String categoryName;
+  final int streakMonths;
+  final bool broken;
+
+  _CategoryStreak copyWith({
+    int? streakMonths,
+    bool? broken,
+  }) {
+    return _CategoryStreak(
+      categoryName: categoryName,
+      streakMonths: streakMonths ?? this.streakMonths,
+      broken: broken ?? this.broken,
+    );
+  }
+}
+
+class _SpendChange {
+  const _SpendChange({
+    required this.categoryName,
+    required this.current,
+    required this.previous,
+    required this.percentChange,
+  });
+
+  final String categoryName;
+  final double current;
+  final double previous;
+  final double percentChange;
 }

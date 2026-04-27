@@ -20,6 +20,7 @@ class DriftSchema {
       min_payment_floor REAL NOT NULL DEFAULT 25.0,
       start_date TEXT,
       loan_end_date TEXT,
+      payment_day INTEGER NOT NULL DEFAULT 1,
       original_balance REAL
     )
   ''';

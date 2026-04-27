@@ -80,6 +80,7 @@ enum ExpenseCategory {
       this == ExpenseCategory.transport ||
       this == ExpenseCategory.oneOff ||
       this == ExpenseCategory.childMaintenance ||
+      this == ExpenseCategory.savings ||
       this == ExpenseCategory.other;
 
   static ExpenseCategory fromName(String name) {

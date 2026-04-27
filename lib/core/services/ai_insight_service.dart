@@ -26,6 +26,7 @@ UK personal finance advisor in a debt management app.
 
 Analyse: debt prioritisation (avalanche vs snowball), cash flow risks, high-APR flags, mortgage overpayment vs debt payoff trade-off, tracking vs budget variances, extra payments direction.
 note: remainingCash is already net of all obligations — do NOT subtract debt payments again.
+If tracking coaching signals are provided, include: spending pattern highlights, habit streaks, and months that stayed within available money.
 
 Rules: £GBP; bullet points + short paragraphs; no markdown tables; under 350 words; honest + encouraging; no specific products; end with a one-line disclaimer that this is guidance, not regulated financial advice.
 ''';
@@ -46,6 +47,7 @@ UK personal finance planner in a debt management app.
 
 For each what-if event: project financial impact; for pay rises use UK 2025/26 PAYE/NI rates and show net monthly change; for one-offs show cash flow impact that month; flag timing conflicts; suggest priority or deferral; project revised debt-free timeline.
 note: remainingCash is already net of all obligations — do NOT subtract debt payments again.
+If tracking coaching signals are provided, include: spending pattern highlights, habit streaks, and months that stayed within available money.
 
 Rules: £GBP; bullet points + labelled lines (no columns/tables); under 450 words; flag negative cash flow clearly; no specific products; end with a one-line disclaimer that this is guidance, not regulated financial advice.
 ''';
@@ -81,6 +83,7 @@ UK personal finance advisor in a debt management app.
 
 Answer the user's question concisely. Give a direct answer, key reasoning, a clear recommendation, and 2-3 concrete next steps.
 note: remainingCash is already net of all obligations — do NOT subtract debt payments again.
+If tracking coaching signals are provided, include: spending pattern highlights, habit streaks, and months that stayed within available money.
 
 STRICT FORMAT RULES:
 - Use £GBP. Use markdown headings (##) and bullet points only. No tables.
@@ -88,6 +91,16 @@ STRICT FORMAT RULES:
 - Maximum 350 words. If you exceed this, you will be cut off mid-sentence. Stay well under it.
 - No specific product recommendations.
 - End with one short italic disclaimer line: this is guidance, not regulated financial advice.
+''';
+
+  static const String _advisorProgressPromptAddon = '''
+
+When the user asks a progress question (for example "How am I doing?"), use this structure:
+- ## Overall status
+- ## Wins this period
+- ## Watch-outs
+- ## Next 7 days (small practical steps)
+Keep tone encouraging and non-judgmental.
 ''';
 
   Future<String> generateAdvisorInsight(
@@ -103,10 +116,27 @@ $question
 
     return _generateContent(
       requestType: AiRequestType.advisor,
-      systemPrompt: _advisorSystemPrompt,
+      systemPrompt: _buildAdvisorSystemPrompt(question),
       prompt: prompt,
       maxOutputTokens: _advisorMaxOutputTokens,
     );
+  }
+
+  String _buildAdvisorSystemPrompt(String question) {
+    if (_isProgressQuestion(question)) {
+      return '$_advisorSystemPrompt$_advisorProgressPromptAddon';
+    }
+    return _advisorSystemPrompt;
+  }
+
+  bool _isProgressQuestion(String question) {
+    final normalized = question.toLowerCase();
+    return normalized.contains('how am i doing') ||
+        normalized.contains('how am i doing?') ||
+        normalized.contains('progress') ||
+        normalized.contains('summary report') ||
+        normalized.contains('check in') ||
+        normalized.contains('check-in');
   }
 
   Future<String> _generateContent({

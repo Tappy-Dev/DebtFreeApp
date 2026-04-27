@@ -267,8 +267,22 @@ class DriftFinancialDatabase extends GeneratedDatabase {
         }
       },
       beforeOpen: (OpeningDetails details) async {
+        await ensureDebtColumns();
         await ensureScenarioChangeScheduleColumns();
       },
+    );
+  }
+
+  Future<void> ensureDebtColumns() async {
+    await _ensureColumnExists(
+      DriftSchema.debtsTable,
+      'payment_day',
+      DriftSchema.addDebtPaymentDayColumn,
+    );
+    await _ensureColumnExists(
+      DriftSchema.debtsTable,
+      'original_balance',
+      DriftSchema.addOriginalBalanceColumn,
     );
   }
 

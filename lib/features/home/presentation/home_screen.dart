@@ -4,6 +4,8 @@ import 'package:debt_free_app/features/budget/domain/build_budget_snapshot.dart'
 import 'package:debt_free_app/features/home/domain/build_home_overview.dart';
 import 'package:debt_free_app/features/simulation/models/scenario_change.dart';
 import 'package:debt_free_app/features/tracking/domain/build_monthly_budget_summary.dart';
+import 'package:debt_free_app/features/tracking/domain/find_overdue_open_budget_period.dart';
+import 'package:debt_free_app/features/tracking/models/budget_period.dart';
 import 'package:debt_free_app/features/tracking/models/monthly_budget_summary.dart';
 import 'package:debt_free_app/features/tracking/models/tracking_workflow_status.dart';
 import 'package:debt_free_app/shared/widgets/app_shell_scaffold.dart';
@@ -26,6 +28,7 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   late final SessionFinancialRepository _repository;
   MonthlyBudgetSummary? _trackingSummary;
+  BudgetPeriod? _oldestOverdueOpenPeriod;
 
   @override
   void initState() {
@@ -54,7 +57,18 @@ class _HomeScreenState extends State<HomeScreen> {
       year: year,
       month: month,
     );
-    if (mounted) setState(() => _trackingSummary = summary);
+    final overdue = await findOldestOverdueOpenPeriod(
+      repository: _repository,
+      now: _repository.effectiveNow,
+      financialMonthStartDay: _repository.financialMonthStartDay,
+      excludePeriodId: summary.period.id,
+    );
+    if (mounted) {
+      setState(() {
+        _trackingSummary = summary;
+        _oldestOverdueOpenPeriod = overdue;
+      });
+    }
   }
 
   @override
@@ -101,6 +115,16 @@ class _HomeScreenState extends State<HomeScreen> {
             const SizedBox(height: 16),
           ],
           if (hasAnyData) ...<Widget>[
+            if (_oldestOverdueOpenPeriod != null) ...<Widget>[
+              _OverdueMonthNoticeCard(
+                period: _oldestOverdueOpenPeriod!,
+                financialMonthStartDay: _repository.financialMonthStartDay,
+                onReview: () => context.push(
+                  '/tracking?month=${_oldestOverdueOpenPeriod!.id}',
+                ),
+              ),
+              const SizedBox(height: 16),
+            ],
             if (_trackingSummary != null && !_trackingSummary!.period.isClosed) ...<Widget>[
               Builder(builder: (context) {
                 final s = _trackingSummary!;
@@ -159,6 +183,78 @@ class _HomeScreenState extends State<HomeScreen> {
             const SizedBox(height: 16),
           ],
         ],
+      ),
+    );
+  }
+}
+
+class _OverdueMonthNoticeCard extends StatelessWidget {
+  const _OverdueMonthNoticeCard({
+    required this.period,
+    required this.financialMonthStartDay,
+    required this.onReview,
+  });
+
+  final BudgetPeriod period;
+  final int financialMonthStartDay;
+  final VoidCallback onReview;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final periodLabel = FinancialMonth.periodLabel(
+      period.year,
+      period.month,
+      financialMonthStartDay,
+    );
+
+    return Card(
+      clipBehavior: Clip.antiAlias,
+      child: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [
+              Colors.orange.withValues(alpha: 0.18),
+              theme.colorScheme.surface,
+            ],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(18),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(Icons.warning_amber_rounded,
+                      size: 20, color: Colors.orange.shade800),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Previous month still open',
+                      style: theme.textTheme.titleMedium,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Text(
+                '$periodLabel has ended and is still open. Close it to lock results before finalising newer months.',
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+              const SizedBox(height: 12),
+              FilledButton.tonalIcon(
+                onPressed: onReview,
+                icon: const Icon(Icons.checklist_rounded, size: 18),
+                label: const Text('Review & close month'),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -348,8 +444,9 @@ class _MonthlySummaryCard extends StatelessWidget {
         : trackingSummary!.extraExpenseActuals
             .fold(0.0, (sum, a) => sum + a.actual);
     final budgetedRemaining = snapshot.remainingCash as double;
+    final carriedForward = trackingSummary?.period.carriedForwardBalance ?? 0.0;
     final remaining =
-        budgetedRemaining - trackableOverspend - extraExpenses - extraDebtPayment;
+        budgetedRemaining + carriedForward - trackableOverspend - extraExpenses - extraDebtPayment;
     final income = snapshot.totalIncome as double;
     final spentPct =
         income > 0 ? ((income - remaining) / income).clamp(0.0, 1.0) : 0.0;

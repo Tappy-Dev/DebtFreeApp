@@ -5,6 +5,7 @@ import 'package:debt_free_app/features/simulation/models/expense.dart';
 import 'package:debt_free_app/core/utils/amount_parser.dart';
 import 'package:debt_free_app/core/utils/financial_month.dart';
 import 'package:debt_free_app/features/tracking/domain/build_monthly_budget_summary.dart';
+import 'package:debt_free_app/features/tracking/domain/find_overdue_open_budget_period.dart';
 import 'package:debt_free_app/features/tracking/models/budget_actual.dart';
 import 'package:debt_free_app/features/tracking/models/budget_actual_entry.dart';
 import 'package:debt_free_app/features/tracking/models/budget_period.dart';
@@ -15,7 +16,12 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 class MonthlyTrackingScreen extends StatefulWidget {
-  const MonthlyTrackingScreen({super.key});
+  const MonthlyTrackingScreen({
+    super.key,
+    this.initialMonthKey,
+  });
+
+  final String? initialMonthKey;
 
   @override
   State<MonthlyTrackingScreen> createState() => _MonthlyTrackingScreenState();
@@ -42,11 +48,11 @@ class _MonthlyTrackingScreenState extends State<MonthlyTrackingScreen> {
   void initState() {
     super.initState();
     final repo = SessionFinancialRepository.instance;
-    final monthKey = repo.currentMonthKeyWithStartDay();
+    final monthKey = widget.initialMonthKey ?? repo.currentMonthKeyWithStartDay();
     final (y, m) = FinancialMonth.parseKey(monthKey);
     _year = y;
     _month = m;
-    _effectiveCurrentMonthKey = monthKey;
+    _effectiveCurrentMonthKey = repo.currentMonthKeyWithStartDay();
     // If a start month is set and current month is before it, jump to start
     final startMonth = repo.appStartMonth;
     if (startMonth != null && startMonth.isNotEmpty) {
@@ -153,6 +159,15 @@ class _MonthlyTrackingScreenState extends State<MonthlyTrackingScreen> {
     _loadMonth();
   }
 
+  void _jumpToMonth(int year, int month) {
+    setState(() {
+      _summary = null;
+      _year = year;
+      _month = month;
+    });
+    _loadMonth();
+  }
+
   String _periodLabel() {
     final startDay =
         SessionFinancialRepository.instance.financialMonthStartDay;
@@ -165,6 +180,46 @@ class _MonthlyTrackingScreenState extends State<MonthlyTrackingScreen> {
   Future<void> _closeMonth() async {
     final summary = _summary;
     if (summary == null) return;
+
+    final repo = SessionFinancialRepository.instance;
+    final overdueOpen = await findOldestOverdueOpenPeriod(
+      repository: repo,
+      now: repo.effectiveNow,
+      financialMonthStartDay: repo.financialMonthStartDay,
+      excludePeriodId: summary.period.id,
+    );
+    if (!mounted) return;
+    if (overdueOpen != null) {
+      final overdueLabel = FinancialMonth.periodLabel(
+        overdueOpen.year,
+        overdueOpen.month,
+        repo.financialMonthStartDay,
+      );
+      final action = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Close Older Month First'),
+          content: Text(
+            '$overdueLabel is still open and has already ended. '
+            'Close that month first before finalizing newer months.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Not now'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Open overdue month'),
+            ),
+          ],
+        ),
+      );
+      if (action == true) {
+        _jumpToMonth(overdueOpen.year, overdueOpen.month);
+      }
+      return;
+    }
 
     // ── Step 1: confirm close ──
     final confirmed = await showDialog<bool>(

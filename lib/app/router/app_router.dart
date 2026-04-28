@@ -140,7 +140,9 @@ GoRouter buildAppRouter() {
       ),
       GoRoute(
         path: '/tracking',
-        builder: (context, state) => const MonthlyTrackingScreen(),
+        builder: (context, state) => MonthlyTrackingScreen(
+          initialMonthKey: state.uri.queryParameters['month'],
+        ),
       ),
       GoRoute(
         path: '/debt-summary',

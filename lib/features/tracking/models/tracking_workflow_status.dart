@@ -30,7 +30,9 @@ class TrackingWorkflowStatus {
   final int daysUntilPeriodEnd;
   final bool canCloseMonth;
 
-  bool get isActionable => stage != TrackingWorkflowStage.closed;
+  bool get isActionable =>
+      stage != TrackingWorkflowStage.closed &&
+      !(stage == TrackingWorkflowStage.inProgress && trackableStartedCount > 0);
 
   /// Whether this status warrants showing a reminder card on the dashboard.
   /// Hide it when tracking is simply in progress and the user has already

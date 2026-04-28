@@ -70,8 +70,9 @@ class _MonthlySummaryScreenState extends State<MonthlySummaryScreen> {
         : trackingSummary.extraExpenseActuals
             .fold(0.0, (sum, a) => sum + a.actual);
     final budgetedRemaining = snapshot.remainingCash;
+    final carriedForward = trackingSummary?.period.carriedForwardBalance ?? 0.0;
     final remaining =
-        budgetedRemaining - trackableOverspend - extraExpenses - extraDebtPayment;
+        budgetedRemaining + carriedForward - trackableOverspend - extraExpenses - extraDebtPayment;
     final income = snapshot.totalIncome;
     final spentPct =
         income > 0 ? ((income - remaining) / income).clamp(0.0, 1.0) : 0.0;
@@ -158,6 +159,16 @@ class _MonthlySummaryScreenState extends State<MonthlySummaryScreen> {
                     label: 'Net income',
                     value: _currency.format(snapshot.totalIncome),
                   ),
+                  if (carriedForward > 0) ...[
+                    const SizedBox(height: 10),
+                    _Row(
+                      icon: Icons.savings_outlined,
+                      iconColor: Colors.green,
+                      label: 'Carried forward from last month',
+                      value: '+${_currency.format(carriedForward)}',
+                      valueColor: Colors.green,
+                    ),
+                  ],
                   const Divider(height: 24),
                   _Row(
                     icon: Icons.receipt_long_outlined,

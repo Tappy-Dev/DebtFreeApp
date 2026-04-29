@@ -1,3 +1,4 @@
+import 'package:debt_free_app/core/data/session_financial_repository.dart';
 import 'package:debt_free_app/core/services/subscription_service.dart';
 import 'package:flutter/material.dart';
 
@@ -15,8 +16,24 @@ class _PaywallScreenState extends State<PaywallScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final sub = SubscriptionService.instance;
+    final isDev = SessionFinancialRepository.instance.developerModeEnabled;
 
     return Scaffold(
+      appBar: isDev
+          ? AppBar(
+              leading: IconButton(
+                icon: const Icon(Icons.arrow_back),
+                onPressed: () async {
+                  await SubscriptionService.instance
+                      .setDeveloperAccessScenario(
+                          DeveloperAccessScenario.activeTrial);
+                },
+              ),
+              title: const Text('DEV: Paywall Preview'),
+              backgroundColor: Colors.deepOrange,
+              foregroundColor: Colors.white,
+            )
+          : null,
       body: SafeArea(
         child: ListenableBuilder(
           listenable: sub,
@@ -70,27 +87,27 @@ class _PaywallScreenState extends State<PaywallScreen> {
                   // Feature list
                   _FeatureRow(
                     icon: Icons.account_balance_wallet_outlined,
-                    text: 'Full budget & debt tracking',
+                    text: 'Monthly budget & expense tracking',
                     theme: theme,
                   ),
                   _FeatureRow(
                     icon: Icons.compare_arrows_rounded,
-                    text: 'Avalanche & Snowball strategies',
+                    text: 'Avalanche & Snowball debt strategies',
+                    theme: theme,
+                  ),
+                  _FeatureRow(
+                    icon: Icons.flag_outlined,
+                    text: 'Debt-free date & payoff projections',
                     theme: theme,
                   ),
                   _FeatureRow(
                     icon: Icons.home_outlined,
-                    text: 'Mortgage overpayment analysis',
+                    text: 'Mortgage overpayment calculator',
                     theme: theme,
                   ),
                   _FeatureRow(
                     icon: Icons.psychology_outlined,
-                    text: 'AI-powered financial advisor',
-                    theme: theme,
-                  ),
-                  _FeatureRow(
-                    icon: Icons.event_note_outlined,
-                    text: 'What-if scenario planner',
+                    text: 'AI-powered budget advisor',
                     theme: theme,
                   ),
                   const SizedBox(height: 32),

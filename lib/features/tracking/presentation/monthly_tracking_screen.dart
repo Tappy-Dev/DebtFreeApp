@@ -37,6 +37,7 @@ class _MonthlyTrackingScreenState extends State<MonthlyTrackingScreen> {
   // Tracks the effective "current month" at last sync – used to detect when
   // developer-mode offset changes so the screen auto-navigates to the new month.
   late String _effectiveCurrentMonthKey;
+  BudgetPeriod? _blockingOverduePeriod;
 
   final _currency = NumberFormat.currency(
     locale: 'en_GB',
@@ -107,9 +108,18 @@ class _MonthlyTrackingScreenState extends State<MonthlyTrackingScreen> {
       SessionFinancialRepository.instance,
     );
     final summary = await builder(year: _year, month: _month);
+    final repo = SessionFinancialRepository.instance;
+    final blocking = await findOldestOverdueOpenPeriod(
+      repository: repo,
+      now: repo.effectiveNow,
+      financialMonthStartDay: repo.financialMonthStartDay,
+      excludePeriodId: summary.period.id,
+      appStartMonth: repo.appStartMonth,
+    );
     if (!mounted) return;
     setState(() {
       _summary = summary;
+      _blockingOverduePeriod = blocking;
       _loading = false;
     });
   }
@@ -134,6 +144,8 @@ class _MonthlyTrackingScreenState extends State<MonthlyTrackingScreen> {
     });
     _loadMonth();
   }
+
+  bool get _isLockedByOverdue => _blockingOverduePeriod != null;
 
   bool get _canGoBack {
     final startMonth =
@@ -187,6 +199,7 @@ class _MonthlyTrackingScreenState extends State<MonthlyTrackingScreen> {
       now: repo.effectiveNow,
       financialMonthStartDay: repo.financialMonthStartDay,
       excludePeriodId: summary.period.id,
+      appStartMonth: repo.appStartMonth,
     );
     if (!mounted) return;
     if (overdueOpen != null) {
@@ -272,8 +285,8 @@ class _MonthlyTrackingScreenState extends State<MonthlyTrackingScreen> {
             ),
             actions: [
               TextButton(
-                onPressed: () => Navigator.pop(context, false),
-                child: const Text('No, discard'),
+                onPressed: () => Navigator.pop(context, null),
+                child: const Text('Cancel'),
               ),
               FilledButton(
                 onPressed: () => Navigator.pop(context, true),
@@ -284,6 +297,7 @@ class _MonthlyTrackingScreenState extends State<MonthlyTrackingScreen> {
         },
       );
       if (!mounted) return;
+      if (carry == null) return; // user cancelled — abort close
       if (carry == true) {
         trackableCarry = underspend;
       }
@@ -305,8 +319,8 @@ class _MonthlyTrackingScreenState extends State<MonthlyTrackingScreen> {
           ),
           actions: [
             TextButton(
-              onPressed: () => Navigator.pop(context, _SurplusChoice.discard),
-              child: const Text('Discard'),
+              onPressed: () => Navigator.pop(context, null),
+              child: const Text('Cancel'),
             ),
             TextButton(
               onPressed: () => Navigator.pop(context, _SurplusChoice.addToSavings),
@@ -320,6 +334,7 @@ class _MonthlyTrackingScreenState extends State<MonthlyTrackingScreen> {
         ),
       );
       if (!mounted) return;
+      if (choice == null) return; // user cancelled — abort close
       if (choice == _SurplusChoice.carryForward) {
         overallCarry = remainingAfterTrackable;
       } else if (choice == _SurplusChoice.addToSavings) {
@@ -448,16 +463,34 @@ class _MonthlyTrackingScreenState extends State<MonthlyTrackingScreen> {
 
     if (confirmed != true || !mounted) return;
 
+    final repo = SessionFinancialRepository.instance;
+
+    // Reopen the period, clearing its carry-forward balance.
     final reopenedPeriod = summary.period.copyWith(
       status: BudgetPeriodStatus.open,
       clearClosedAt: true,
+      carriedForwardBalance: 0,
     );
-    await SessionFinancialRepository.instance.saveBudgetPeriod(reopenedPeriod);
+    await repo.saveBudgetPeriod(reopenedPeriod);
+
+    // Clear the carry-forward that was written to next month's period.
+    var nextMonth = summary.period.month + 1;
+    var nextYear = summary.period.year;
+    if (nextMonth > 12) { nextMonth = 1; nextYear++; }
+    final nextPeriod = await repo.getBudgetPeriod(
+        BudgetPeriod.buildId(nextYear, nextMonth));
+    if (nextPeriod != null && nextPeriod.carriedForwardBalance > 0) {
+      await repo.saveBudgetPeriod(
+        nextPeriod.copyWith(carriedForwardBalance: 0),
+      );
+    }
+
     _scheduleReload();
   }
 
   Future<void> _editActual(BudgetActual actual) async {
     if (_summary?.period.isClosed == true) return;
+    if (_isLockedByOverdue) { _showLockedSnackBar(); return; }
 
     final controller = TextEditingController(
       text: actual.actual > 0 ? actual.actual.toStringAsFixed(2) : '',
@@ -502,7 +535,19 @@ class _MonthlyTrackingScreenState extends State<MonthlyTrackingScreen> {
     _scheduleReload();
   }
 
+  void _showLockedSnackBar() {
+    final repo = SessionFinancialRepository.instance;
+    final blocking = _blockingOverduePeriod;
+    if (blocking == null) return;
+    final label = FinancialMonth.periodLabel(
+        blocking.year, blocking.month, repo.financialMonthStartDay);
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text('Close $label first before editing this month.'),
+    ));
+  }
+
   Future<void> _addTrackedIncome(MonthlyBudgetSummary summary) async {
+    if (_isLockedByOverdue) { _showLockedSnackBar(); return; }
     final nameController = TextEditingController();
     final amountController = TextEditingController();
 
@@ -579,6 +624,7 @@ class _MonthlyTrackingScreenState extends State<MonthlyTrackingScreen> {
   }
 
   Future<void> _addTrackedExpense(MonthlyBudgetSummary summary) async {
+    if (_isLockedByOverdue) { _showLockedSnackBar(); return; }
     final nameController = TextEditingController();
     final amountController = TextEditingController();
 
@@ -835,12 +881,18 @@ class _MonthlyTrackingScreenState extends State<MonthlyTrackingScreen> {
       now: repo.effectiveNow,
       financialMonthStartDay: repo.financialMonthStartDay,
       isCurrentPeriod: viewKey == currentKey,
+      hasAnyPastPeriodActivity: false,
     );
 
     return ListView(
       padding: const EdgeInsets.all(20),
       children: [
-        if (workflowStatus.isActionable) ...[
+        // ── Overdue lock banner ──
+        if (_isLockedByOverdue) ...[
+          _buildOverdueLockBanner(theme, repo),
+          const SizedBox(height: 12),
+        ],
+        if (!_isLockedByOverdue && workflowStatus.isActionable) ...[
           _buildWorkflowBanner(workflowStatus),
           const SizedBox(height: 12),
         ],
@@ -1007,7 +1059,7 @@ class _MonthlyTrackingScreenState extends State<MonthlyTrackingScreen> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               FilledButton.tonalIcon(
-                onPressed: _closeMonth,
+                onPressed: _isLockedByOverdue ? null : _closeMonth,
                 icon: const Icon(Icons.lock_outline, size: 18),
                 label: const Text('Close Month'),
                 style: FilledButton.styleFrom(
@@ -1063,6 +1115,34 @@ class _MonthlyTrackingScreenState extends State<MonthlyTrackingScreen> {
           ),
         const SizedBox(height: 16),
       ],
+    );
+  }
+
+  Widget _buildOverdueLockBanner(ThemeData theme, SessionFinancialRepository repo) {
+    final blocking = _blockingOverduePeriod!;
+    final label = FinancialMonth.periodLabel(
+        blocking.year, blocking.month, repo.financialMonthStartDay);
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.red.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.red.withValues(alpha: 0.35)),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.lock_outlined, size: 18, color: Colors.red.shade700),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              'Close $label first before editing this month.',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: Colors.red.shade700,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 

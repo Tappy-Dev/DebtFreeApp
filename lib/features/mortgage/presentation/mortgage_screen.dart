@@ -322,7 +322,10 @@ class _MortgageScreenState extends State<MortgageScreen> {
                     Expanded(
                       child: _MortgageStatChip(
                         label: 'Monthly Payment',
-                        value: _currencyFormat.format(detail.monthlyPayment),
+                        value: _currencyFormat.format(
+                          detail.monthlyPayment +
+                              (selectedMortgage.overpayment),
+                        ),
                         icon: Icons.payments_outlined,
                         color: theme.colorScheme.primary,
                       ),

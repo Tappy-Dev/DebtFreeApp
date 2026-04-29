@@ -113,6 +113,9 @@ class FinancialSummary {
       'Salary sacrifice net cost: £${budgetSnapshot.salarySacrificeNetCost.toStringAsFixed(2)}',
     );
     buffer.writeln(
+      'Monthly savings pots: £${budgetSnapshot.totalSavings.toStringAsFixed(2)}',
+    );
+    buffer.writeln(
       'Remaining cash (post all deductions): £${budgetSnapshot.remainingCash.toStringAsFixed(2)}',
     );
 
@@ -221,6 +224,14 @@ class FinancialSummary {
         buffer.writeln(
           'Net variance: £${month.netVariance.toStringAsFixed(2)} '
           '(${month.isOverBudget ? 'OVER budget' : 'on track'})',
+        );
+        if (month.period.carriedForwardBalance > 0) {
+          buffer.writeln(
+            'Carried forward from previous month: £${month.period.carriedForwardBalance.toStringAsFixed(2)}',
+          );
+        }
+        buffer.writeln(
+          'Actual money remaining (inc. carried forward): £${month.overallActualRemaining.toStringAsFixed(2)}',
         );
 
         // Show per-item detail for items with actuals entered

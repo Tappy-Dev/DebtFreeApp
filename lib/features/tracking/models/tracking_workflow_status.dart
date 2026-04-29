@@ -19,6 +19,7 @@ class TrackingWorkflowStatus {
     required this.extraExpenseCount,
     required this.daysUntilPeriodEnd,
     required this.canCloseMonth,
+    required this.isFirstTimeEver,
   });
 
   final TrackingWorkflowStage stage;
@@ -29,20 +30,25 @@ class TrackingWorkflowStatus {
   final int extraExpenseCount;
   final int daysUntilPeriodEnd;
   final bool canCloseMonth;
+  final bool isFirstTimeEver;
 
   bool get isActionable =>
       stage != TrackingWorkflowStage.closed &&
       !(stage == TrackingWorkflowStage.inProgress && trackableStartedCount > 0);
 
-  /// Whether this status warrants showing a reminder card on the dashboard.
-  /// Hide it when tracking is simply in progress and the user has already
-  /// logged at least one item — no need to keep nudging them.
-  bool get showOnDashboard =>
-      stage != TrackingWorkflowStage.inProgress || trackableStartedCount == 0;
+  /// Show "Start tracking" banner only for first-time users at gettingStarted.
+  /// Hide for returning users, and hide when tracking is actively in progress.
+  bool get showOnDashboard {
+    if (stage == TrackingWorkflowStage.closed) return false;
+    if (stage == TrackingWorkflowStage.gettingStarted && !isFirstTimeEver) return false;
+    if (stage == TrackingWorkflowStage.inProgress && trackableStartedCount > 0) return false;
+    return true;
+  }
 }
 
 TrackingWorkflowStatus buildTrackingWorkflowStatus({
   required MonthlyBudgetSummary summary,
+  required bool hasAnyPastPeriodActivity,
   required DateTime now,
   required int financialMonthStartDay,
   required bool isCurrentPeriod,
@@ -62,6 +68,7 @@ TrackingWorkflowStatus buildTrackingWorkflowStatus({
   final extraExpenseCount = summary.extraExpenseActuals
       .where((actual) => actual.actual > 0)
       .length;
+  final isFirstTimeEver = !hasAnyPastPeriodActivity;
 
   if (summary.period.isClosed) {
     return TrackingWorkflowStatus(
@@ -73,6 +80,7 @@ TrackingWorkflowStatus buildTrackingWorkflowStatus({
       extraExpenseCount: extraExpenseCount,
       daysUntilPeriodEnd: daysUntilEnd,
       canCloseMonth: false,
+      isFirstTimeEver: isFirstTimeEver,
     );
   }
 
@@ -86,6 +94,7 @@ TrackingWorkflowStatus buildTrackingWorkflowStatus({
       extraExpenseCount: extraExpenseCount,
       daysUntilPeriodEnd: daysUntilEnd,
       canCloseMonth: true,
+      isFirstTimeEver: isFirstTimeEver,
     );
   }
 
@@ -101,6 +110,7 @@ TrackingWorkflowStatus buildTrackingWorkflowStatus({
       extraExpenseCount: extraExpenseCount,
       daysUntilPeriodEnd: daysUntilEnd,
       canCloseMonth: false,
+      isFirstTimeEver: isFirstTimeEver,
     );
   }
 
@@ -114,6 +124,7 @@ TrackingWorkflowStatus buildTrackingWorkflowStatus({
       extraExpenseCount: extraExpenseCount,
       daysUntilPeriodEnd: daysUntilEnd,
       canCloseMonth: true,
+      isFirstTimeEver: isFirstTimeEver,
     );
   }
 
@@ -127,6 +138,7 @@ TrackingWorkflowStatus buildTrackingWorkflowStatus({
       extraExpenseCount: extraExpenseCount,
       daysUntilPeriodEnd: daysUntilEnd,
       canCloseMonth: true,
+      isFirstTimeEver: isFirstTimeEver,
     );
   }
 
@@ -139,5 +151,6 @@ TrackingWorkflowStatus buildTrackingWorkflowStatus({
     extraExpenseCount: extraExpenseCount,
     daysUntilPeriodEnd: daysUntilEnd,
     canCloseMonth: false,
+    isFirstTimeEver: isFirstTimeEver,
   );
 }

@@ -29,6 +29,7 @@ class _HomeScreenState extends State<HomeScreen> {
   late final SessionFinancialRepository _repository;
   MonthlyBudgetSummary? _trackingSummary;
   BudgetPeriod? _oldestOverdueOpenPeriod;
+  bool _hasPastTrackingHistory = false;
 
   @override
   void initState() {
@@ -62,11 +63,15 @@ class _HomeScreenState extends State<HomeScreen> {
       now: _repository.effectiveNow,
       financialMonthStartDay: _repository.financialMonthStartDay,
       excludePeriodId: summary.period.id,
+      appStartMonth: _repository.appStartMonth,
     );
+    final allPeriods = await _repository.getBudgetPeriods();
+    final hasPast = allPeriods.any((p) => p.isClosed);
     if (mounted) {
       setState(() {
         _trackingSummary = summary;
         _oldestOverdueOpenPeriod = overdue;
+        _hasPastTrackingHistory = hasPast;
       });
     }
   }
@@ -136,6 +141,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   now: repo.effectiveNow,
                   financialMonthStartDay: repo.financialMonthStartDay,
                   isCurrentPeriod: summaryKey == currentKey,
+                  hasAnyPastPeriodActivity: _hasPastTrackingHistory,
                 );
                 if (!status.showOnDashboard) return const SizedBox.shrink();
                 return Column(
@@ -202,11 +208,11 @@ class _OverdueMonthNoticeCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final periodLabel = FinancialMonth.periodLabel(
-      period.year,
-      period.month,
-      financialMonthStartDay,
-    );
+    final start = FinancialMonth.startDate(period.year, period.month, financialMonthStartDay);
+    final end = FinancialMonth.endDate(period.year, period.month, financialMonthStartDay);
+    final periodLabel = financialMonthStartDay <= 1
+        ? FinancialMonth.periodLabel(period.year, period.month, financialMonthStartDay)
+        : '${start.day} ${DateFormat('MMM').format(start)} – ${end.day} ${DateFormat('MMM').format(end)} ${end.year}';
 
     return Card(
       clipBehavior: Clip.antiAlias,
@@ -653,6 +659,7 @@ class _TrackingWorkflowReminderCard extends StatelessWidget {
       now: repo.effectiveNow,
       financialMonthStartDay: repo.financialMonthStartDay,
       isCurrentPeriod: summaryKey == currentKey,
+      hasAnyPastPeriodActivity: false,
     );
     final (icon, accentColor) = _workflowPresentation(theme, status.stage);
 

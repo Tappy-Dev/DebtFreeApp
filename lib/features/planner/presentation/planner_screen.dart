@@ -1,5 +1,6 @@
 import 'package:debt_free_app/core/data/session_financial_repository.dart';
 import 'package:debt_free_app/core/services/financial_summary.dart';
+import 'package:debt_free_app/core/services/subscription_service.dart';
 import 'package:debt_free_app/core/utils/amount_parser.dart';
 import 'package:debt_free_app/features/budget/domain/build_budget_snapshot.dart';
 import 'package:debt_free_app/features/planner/models/planner_event.dart';
@@ -183,6 +184,9 @@ class _PlannerScreenState extends State<PlannerScreen> {
 
   Widget _buildAdvisorSection(BuildContext context) {
     final theme = Theme.of(context);
+    final sub = SubscriptionService.instance;
+    final isEntitled = sub.isEntitled;
+    
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -211,7 +215,34 @@ class _PlannerScreenState extends State<PlannerScreen> {
         ),
         const SizedBox(height: 16),
 
-        if (!_hasAiData)
+        // Premium lock gate
+        if (!isEntitled)
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: theme.colorScheme.primaryContainer.withValues(alpha: 0.3),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(
+                color: theme.colorScheme.primary.withValues(alpha: 0.3),
+              ),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.workspace_premium_rounded,
+                    size: 18, color: theme.colorScheme.primary),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'Subscribe to unlock AI-powered budget insights.',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.primary,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          )
+        else if (!_hasAiData)
           Row(
             children: [
               Icon(Icons.lock_outline_rounded,
@@ -293,6 +324,9 @@ class _PlannerScreenState extends State<PlannerScreen> {
           _repository.getMortgage() != null);
 
   Future<void> _openAdvisorResult(_AdvisorPrompt prompt) async {
+    final sub = SubscriptionService.instance;
+    if (!sub.isEntitled) return; // Guard: not entitled
+    
     final summary = await _buildFinancialSummary();
     if (!mounted) {
       return;

@@ -1,4 +1,4 @@
-package com.example.debt_free_app
+package com.tappydev.debtfree
 
 import io.flutter.embedding.android.FlutterActivity
 

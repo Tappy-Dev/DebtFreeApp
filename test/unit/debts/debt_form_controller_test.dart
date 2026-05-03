@@ -7,6 +7,7 @@ import 'package:debt_free_app/features/simulation/models/mortgage.dart';
 import 'package:debt_free_app/features/simulation/models/salary_sacrifice.dart';
 import 'package:debt_free_app/features/simulation/models/scenario_change.dart';
 import 'package:debt_free_app/features/tracking/models/budget_actual.dart';
+import 'package:debt_free_app/features/tracking/models/budget_actual_entry.dart';
 import 'package:debt_free_app/features/tracking/models/budget_period.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -94,6 +95,30 @@ class _FakeFinancialRepository implements FinancialRepository {
   Future<void> saveBudgetActual(BudgetActual actual) async {}
   @override
   Future<void> saveBudgetActuals(List<BudgetActual> actuals) async {}
+  @override
+  List<Mortgage> getMortgages() {
+    final m = getMortgage();
+    return m == null ? const <Mortgage>[] : <Mortgage>[m];
+  }
+  @override
+  void deleteMortgageById(String mortgageId) {
+    final m = getMortgage();
+    if (m != null && m.id == mortgageId) deleteMortgage();
+  }
+  @override
+  String? get appStartMonth => null;
+  @override
+  Future<void> setAppStartMonth(String monthKey) async {}
+  @override
+  Future<void> deleteBudgetActual(String actualId) async {}
+  @override
+  Future<void> deleteSeededBudgetActuals(String periodId) async {}
+  @override
+  Future<List<BudgetActualEntry>> getBudgetActualEntries(String periodId) async => const [];
+  @override
+  Future<void> saveBudgetActualEntry(BudgetActualEntry entry) async {}
+  @override
+  Future<void> deleteBudgetActualEntry(String entryId) async {}
 }
 
 void main() {
@@ -146,6 +171,6 @@ void main() {
 
     expect(debt.debtType, DebtType.loan);
     expect(debt.loanEndDate, DateTime(2029, 3));
-    expect(debt.minimumPayment, closeTo(365.08, 0.02));
+    expect(debt.minimumPayment, closeTo(374.59, 0.02));
   });
 }

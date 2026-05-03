@@ -100,7 +100,8 @@ class ScenarioBuilderController {
       return 'Scenario amounts must be valid.';
     }
 
-    final availableCash = _remainingCash() + parsedIncomeIncrease + parsedExpenseReduction;
+    final availableCash =
+        _remainingCash() + parsedIncomeIncrease + parsedExpenseReduction;
     final safeAvailableCash = availableCash < 0 ? 0 : availableCash;
 
     if (safeAvailableCash == 0 && parsedExtraPayment > 0) {
@@ -146,15 +147,19 @@ class ScenarioBuilderController {
 
   void clearScenarioPlan() {
     // Preserve per-debt extra payments, only clear global scenario entries
-    final perDebtExtras = _repository.getScenarioChanges()
-        .where((c) => c.changeType == ChangeType.extraPayment && c.debtId != null)
+    final perDebtExtras = _repository
+        .getScenarioChanges()
+        .where(
+            (c) => c.changeType == ChangeType.extraPayment && c.debtId != null)
         .toList();
     _repository.saveScenarioChanges(perDebtExtras);
   }
 
   void normalizeCurrentPlan() {
-    final perDebtExtras = _repository.getScenarioChanges()
-        .where((c) => c.changeType == ChangeType.extraPayment && c.debtId != null)
+    final perDebtExtras = _repository
+        .getScenarioChanges()
+        .where(
+            (c) => c.changeType == ChangeType.extraPayment && c.debtId != null)
         .toList();
     _repository.saveScenarioChanges([
       ..._currentPlan().toChanges(),
@@ -165,8 +170,10 @@ class ScenarioBuilderController {
   void removeChange(ChangeType type) {
     final updatedPlan = _currentPlan().removeType(type);
     // Preserve per-debt extra payments when removing from scenarios
-    final perDebtExtras = _repository.getScenarioChanges()
-        .where((c) => c.changeType == ChangeType.extraPayment && c.debtId != null)
+    final perDebtExtras = _repository
+        .getScenarioChanges()
+        .where(
+            (c) => c.changeType == ChangeType.extraPayment && c.debtId != null)
         .toList();
     _repository.saveScenarioChanges([
       ...updatedPlan.toChanges(),
@@ -190,8 +197,10 @@ class ScenarioBuilderController {
     );
 
     // Preserve per-debt extra payments
-    final perDebtExtras = _repository.getScenarioChanges()
-        .where((c) => c.changeType == ChangeType.extraPayment && c.debtId != null)
+    final perDebtExtras = _repository
+        .getScenarioChanges()
+        .where(
+            (c) => c.changeType == ChangeType.extraPayment && c.debtId != null)
         .toList();
     _repository.saveScenarioChanges([
       ...plan.toChanges(),
@@ -236,8 +245,8 @@ class ScenarioBuilderController {
         .getDebts()
         .fold<double>(0, (double sum, item) => sum + item.currentMinPayment());
     final mortgagePayment = _repository
-      .getMortgages()
-      .fold<double>(0, (double sum, m) => sum + m.totalMonthlyPayment);
+        .getMortgages()
+        .fold<double>(0, (double sum, m) => sum + m.totalMonthlyHousingCost);
 
     return totalIncome -
         totalBills -

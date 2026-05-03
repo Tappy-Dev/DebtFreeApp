@@ -35,28 +35,37 @@ class BuildBudgetSnapshot {
         .where((e) => e.category == ExpenseCategory.savings)
         .fold<double>(0, (sum, e) => sum + e.amount);
     final totalExpenses = expenses.fold<double>(
-      0,
-      (double sum, item) => sum + item.amount,
-    ) - totalSavings;
+          0,
+          (double sum, item) => sum + item.amount,
+        ) -
+        totalSavings;
     final totalMinimumPayments = debts.fold<double>(
       0,
       (double sum, item) => sum + item.currentMinPayment(),
     );
+    // Sum active recurring extra payments saved by the debt slider
+    // (identified by id prefix 'recurring-extra-').
+    final totalRecurringExtraDebtPayments = debts.fold<double>(0, (sum, debt) {
+      for (final extra in debt.extraPayments) {
+        if (extra.id.startsWith('recurring-extra-')) {
+          return sum + extra.amount;
+        }
+      }
+      return sum;
+    });
     final mortgagePayment = mortgages.fold<double>(
       0,
-      (sum, mortgage) => sum + mortgage.totalMonthlyPayment,
+      (sum, mortgage) => sum + mortgage.totalMonthlyHousingCost,
     );
 
     // True take-home impact of salary sacrifice (not gross sacrificed amount).
     final salarySacrificeNetCost = income.fold<double>(
       0,
-      (double sum, item) =>
-        isBonusIncome(item)
+      (double sum, item) => isBonusIncome(item)
           ? sum
-          :
-          sum +
-          (item.payBreakdown(totalMonthlySacrifice: 0).monthlyNet -
-              item.payBreakdown().monthlyNet),
+          : sum +
+              (item.payBreakdown(totalMonthlySacrifice: 0).monthlyNet -
+                  item.payBreakdown().monthlyNet),
     );
 
     return BudgetSnapshot(
@@ -68,12 +77,14 @@ class BuildBudgetSnapshot {
       totalMinimumPayments: totalMinimumPayments,
       mortgagePayment: mortgagePayment,
       salarySacrificeNetCost: salarySacrificeNetCost,
+      totalRecurringExtraDebtPayments: totalRecurringExtraDebtPayments,
       remainingCash: totalIncome -
           totalBills -
           totalSubscriptions -
           totalExpenses -
           totalSavings -
           totalMinimumPayments -
+          totalRecurringExtraDebtPayments -
           mortgagePayment,
     );
   }

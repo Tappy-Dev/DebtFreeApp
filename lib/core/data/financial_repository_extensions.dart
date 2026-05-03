@@ -32,7 +32,7 @@ extension FinancialRepositoryScenarioPlan on FinancialRepository {
       outgoings.add(Expense(
         id: '_mortgage_${mortgage.id}',
         name: mortgage.name,
-        amount: mortgage.totalMonthlyPayment,
+        amount: mortgage.totalMonthlyHousingCost,
       ));
     }
     return outgoings;

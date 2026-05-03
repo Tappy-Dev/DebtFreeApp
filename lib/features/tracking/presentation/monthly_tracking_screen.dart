@@ -148,15 +148,27 @@ class _MonthlyTrackingScreenState extends State<MonthlyTrackingScreen> {
   bool get _isLockedByOverdue => _blockingOverduePeriod != null;
 
   bool get _canGoBack {
-    final startMonth =
-        SessionFinancialRepository.instance.appStartMonth;
-    if (startMonth == null || startMonth.isEmpty) return true;
     // Compute what the previous month key would be
     var prevYear = _year;
     var prevMonth = _month - 1;
     if (prevMonth < 1) { prevMonth = 12; prevYear--; }
     final prevKey = '$prevYear-${prevMonth.toString().padLeft(2, '0')}';
-    return prevKey.compareTo(startMonth) >= 0;
+
+    // Never go further back than 1 month before the current effective month
+    final (curY, curM) = FinancialMonth.parseKey(_effectiveCurrentMonthKey);
+    var oneBackYear = curY;
+    var oneBackMonth = curM - 1;
+    if (oneBackMonth < 1) { oneBackMonth = 12; oneBackYear--; }
+    final oneBackKey = '$oneBackYear-${oneBackMonth.toString().padLeft(2, '0')}';
+    if (prevKey.compareTo(oneBackKey) < 0) return false;
+
+    // Also respect appStartMonth if set
+    final startMonth =
+        SessionFinancialRepository.instance.appStartMonth;
+    if (startMonth != null && startMonth.isNotEmpty) {
+      return prevKey.compareTo(startMonth) >= 0;
+    }
+    return true;
   }
 
   void _nextMonth() {
@@ -526,8 +538,6 @@ class _MonthlyTrackingScreenState extends State<MonthlyTrackingScreen> {
       ),
     );
 
-    controller.dispose();
-
     if (result == null || !mounted) return;
 
     final updated = actual.copyWith(actual: result);
@@ -596,9 +606,6 @@ class _MonthlyTrackingScreenState extends State<MonthlyTrackingScreen> {
         ],
       ),
     );
-
-    nameController.dispose();
-    amountController.dispose();
 
     if (result == null || !mounted) return;
 
@@ -674,9 +681,6 @@ class _MonthlyTrackingScreenState extends State<MonthlyTrackingScreen> {
       ),
     );
 
-    nameController.dispose();
-    amountController.dispose();
-
     if (result == null || !mounted) return;
 
     final name = result['name'] as String;
@@ -730,7 +734,7 @@ class _MonthlyTrackingScreenState extends State<MonthlyTrackingScreen> {
                       context: context,
                       initialDate: selectedDate,
                       firstDate: DateTime(selectedDate.year - 1),
-                      lastDate: DateTime.now().add(const Duration(days: 1)),
+                      lastDate: SessionFinancialRepository.instance.effectiveNow.add(const Duration(days: 365)),
                     );
                     if (picked != null) {
                       setDialogState(() => selectedDate = picked);
@@ -783,9 +787,6 @@ class _MonthlyTrackingScreenState extends State<MonthlyTrackingScreen> {
         });
       },
     );
-
-    refController.dispose();
-    amountController.dispose();
 
     if (result == null || !mounted) return;
 
@@ -896,39 +897,9 @@ class _MonthlyTrackingScreenState extends State<MonthlyTrackingScreen> {
           _buildWorkflowBanner(workflowStatus),
           const SizedBox(height: 12),
         ],
-        // ── Carried Forward Balance ──
-        if (summary.period.carriedForwardBalance > 0) ...[
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-            decoration: BoxDecoration(
-              color: Colors.green.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: Colors.green.withValues(alpha: 0.35)),
-            ),
-            child: Row(
-              children: [
-                const Icon(Icons.savings_outlined, size: 18, color: Colors.green),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    'Balance carried forward from last month',
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: Colors.green,
-                    ),
-                  ),
-                ),
-                Text(
-                  '+${_currency.format(summary.period.carriedForwardBalance)}',
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    color: Colors.green,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 12),
-        ],
+        // ── Opening carry-forward balance (editable) ──
+        _buildCarriedForwardCard(summary, theme),
+        const SizedBox(height: 12),
         // ── Extra Income ──
         _buildCollapsibleCard(
           icon: Icons.arrow_downward_rounded,
@@ -1118,6 +1089,120 @@ class _MonthlyTrackingScreenState extends State<MonthlyTrackingScreen> {
     );
   }
 
+  Widget _buildCarriedForwardCard(MonthlyBudgetSummary summary, ThemeData theme) {
+    final amount = summary.period.carriedForwardBalance;
+    final hasCarry = amount > 0;
+    final accent = hasCarry ? Colors.green : theme.colorScheme.onSurfaceVariant;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: hasCarry
+            ? Colors.green.withValues(alpha: 0.12)
+            : theme.colorScheme.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: hasCarry
+              ? Colors.green.withValues(alpha: 0.35)
+              : theme.colorScheme.outlineVariant,
+        ),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.savings_outlined, size: 18, color: accent),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              'Opening balance carried forward',
+              style: theme.textTheme.bodySmall?.copyWith(color: accent),
+            ),
+          ),
+          Text(
+            _currency.format(amount),
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: accent,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          if (summary.period.isOpen) ...[
+            const SizedBox(width: 6),
+            IconButton(
+              tooltip: 'Adjust carried-forward balance',
+              visualDensity: VisualDensity.compact,
+              onPressed: _isLockedByOverdue
+                  ? _showLockedSnackBar
+                  : () => _editCarriedForwardBalance(summary),
+              icon: Icon(
+                Icons.edit_outlined,
+                size: 18,
+                color: theme.colorScheme.primary,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Future<void> _editCarriedForwardBalance(MonthlyBudgetSummary summary) async {
+    final controller = TextEditingController(
+      text: summary.period.carriedForwardBalance > 0
+          ? summary.period.carriedForwardBalance.toStringAsFixed(2)
+          : '',
+    );
+
+    final result = await showDialog<double>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Adjust Opening Balance'),
+        content: TextField(
+          controller: controller,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          autofocus: true,
+          decoration: const InputDecoration(
+            labelText: 'Carried forward amount',
+            prefixText: '£',
+            helperText:
+                'This is the balance carried in from the previous month. '
+                'Correct it here if the auto-calculated amount was wrong.',
+            helperMaxLines: 3,
+            border: OutlineInputBorder(),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () {
+              final parsed = AmountParser.tryParse(controller.text) ?? 0.0;
+              Navigator.pop(context, math.max(0.0, parsed));
+            },
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+
+    if (result == null || !mounted) return;
+
+    final updated = summary.period.copyWith(carriedForwardBalance: result);
+    await SessionFinancialRepository.instance.saveBudgetPeriod(updated);
+    _scheduleReload();
+
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(
+            'Opening carried-forward balance updated to ${_currency.format(result)}.',
+          ),
+        ),
+      );
+  }
+
   Widget _buildOverdueLockBanner(ThemeData theme, SessionFinancialRepository repo) {
     final blocking = _blockingOverduePeriod!;
     final label = FinancialMonth.periodLabel(
@@ -1193,18 +1278,6 @@ class _MonthlyTrackingScreenState extends State<MonthlyTrackingScreen> {
             style: theme.textTheme.bodyMedium?.copyWith(
               color: theme.colorScheme.onSurfaceVariant,
             ),
-          ),
-          const SizedBox(height: 10),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              _buildWorkflowChip(
-                'Trackable',
-                '${status.trackableStartedCount}/${status.trackableTotalCount}',
-              ),
-              _buildWorkflowChip('Extra', '${status.extraExpenseCount}'),
-            ],
           ),
           if (status.canCloseMonth) ...[
             const SizedBox(height: 12),

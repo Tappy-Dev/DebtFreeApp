@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:debt_free_app/core/data/drift_financial_database.dart';
+import 'package:debt_free_app/core/data/drift_schema.dart';
 import 'package:debt_free_app/core/data/financial_repository.dart';
 import 'package:debt_free_app/core/sample/demo_data.dart';
 import 'package:debt_free_app/core/utils/financial_month.dart';
@@ -240,7 +241,7 @@ class SessionFinancialRepository extends ChangeNotifier
     await waitForPendingWrites();
     await _database.customStatement('DELETE FROM debts');
     await _database.customStatement('DELETE FROM debt_extra_payments');
-    await _database.customStatement('DELETE FROM debt_extra_payments');
+    await _database.customStatement('DELETE FROM ${DriftSchema.salarySacrificesTable}');
     await _database.customStatement('DELETE FROM income_sources');
     await _database.customStatement('DELETE FROM expenses');
     await _database.customStatement('DELETE FROM bills');
@@ -264,6 +265,9 @@ class SessionFinancialRepository extends ChangeNotifier
     _financialMonthStartDay = 1;
     _developerModeEnabled = false;
     _developerMonthOffset = 0;
+    _themeMode = ThemeMode.dark;
+    themeNotifier.value = ThemeMode.dark;
+    _hasSeenWelcome = false;
     _activeBudgetMonth = _currentMonthKey();
 
     notifyListeners();

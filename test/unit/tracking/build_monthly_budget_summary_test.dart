@@ -7,6 +7,7 @@ import 'package:debt_free_app/features/simulation/models/salary_sacrifice.dart';
 import 'package:debt_free_app/features/simulation/models/scenario_change.dart';
 import 'package:debt_free_app/features/tracking/domain/build_monthly_budget_summary.dart';
 import 'package:debt_free_app/features/tracking/models/budget_actual.dart';
+import 'package:debt_free_app/features/tracking/models/budget_actual_entry.dart';
 import 'package:debt_free_app/features/tracking/models/budget_period.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -23,6 +24,7 @@ class _TrackingRepository implements FinancialRepository {
     this.debts = const [],
     this.income = const [],
     this.expenses = const [],
+    this.bills = const [],
   });
 
   @override
@@ -115,6 +117,30 @@ class _TrackingRepository implements FinancialRepository {
       await saveBudgetActual(a);
     }
   }
+  @override
+  List<Mortgage> getMortgages() {
+    final m = getMortgage();
+    return m == null ? const <Mortgage>[] : <Mortgage>[m];
+  }
+  @override
+  void deleteMortgageById(String mortgageId) {
+    final m = getMortgage();
+    if (m != null && m.id == mortgageId) deleteMortgage();
+  }
+  @override
+  String? get appStartMonth => null;
+  @override
+  Future<void> setAppStartMonth(String monthKey) async {}
+  @override
+  Future<void> deleteBudgetActual(String actualId) async {}
+  @override
+  Future<void> deleteSeededBudgetActuals(String periodId) async {}
+  @override
+  Future<List<BudgetActualEntry>> getBudgetActualEntries(String periodId) async => const [];
+  @override
+  Future<void> saveBudgetActualEntry(BudgetActualEntry entry) async {}
+  @override
+  Future<void> deleteBudgetActualEntry(String entryId) async {}
 }
 
 void main() {
@@ -124,8 +150,8 @@ void main() {
         IncomeSource(id: 'salary', name: 'Salary', annualGross: 34800, overrideMonthlyNet: 2900),
       ],
       expenses: const [
-        Expense(id: 'rent', name: 'Rent', amount: 400),
-        Expense(id: 'food', name: 'Food', amount: 300),
+        Expense(id: 'rent', name: 'Rent', amount: 400, trackable: true),
+        Expense(id: 'food', name: 'Food', amount: 300, trackable: true),
       ],
       debts: [
         DebtAccount(
@@ -145,17 +171,17 @@ void main() {
     expect(summary.period.year, 2026);
     expect(summary.period.month, 4);
     expect(summary.period.isOpen, true);
-    expect(summary.actuals.length, 4); // 1 income + 2 expenses + 1 debt
+    expect(summary.actuals.length, 2); // trackable expenses only
 
-    expect(summary.totalBudgetedIncome, 2900);
+    expect(summary.totalBudgetedIncome, 0);
     expect(summary.totalActualIncome, 0);
     expect(summary.totalBudgetedExpenses, 700);
     expect(summary.totalActualExpenses, 0);
-    expect(summary.totalBudgetedDebtPayments, 50);
+    expect(summary.totalBudgetedDebtPayments, 0);
     expect(summary.totalActualDebtPayments, 0);
 
-    // Net variance should be positive (under budget since nothing spent yet)
-    expect(summary.netVariance, -2900 + 700 + 50); // income shortfall
+    // Under budget spend does not increase net variance; only overspend lowers it.
+    expect(summary.netVariance, 0);
   });
 
   test('BuildMonthlyBudgetSummary returns existing period on second call',
@@ -165,7 +191,7 @@ void main() {
         IncomeSource(id: 'salary', name: 'Salary', annualGross: 34800, overrideMonthlyNet: 2900),
       ],
       expenses: const [
-        Expense(id: 'rent', name: 'Rent', amount: 400),
+        Expense(id: 'rent', name: 'Rent', amount: 400, trackable: true),
       ],
     );
 
@@ -178,7 +204,7 @@ void main() {
     // Second call returns the same period - no duplicate
     final summary = await builder(year: 2026, month: 5);
     expect((await repo.getBudgetPeriods()).length, 1);
-    expect(summary.actuals.length, 2); // 1 income + 1 expense
+    expect(summary.actuals.length, 1); // trackable expenses only
   });
 
   test('BuildMonthlyBudgetSummary detects over-budget items', () async {
@@ -187,7 +213,7 @@ void main() {
         IncomeSource(id: 'salary', name: 'Salary', annualGross: 24000, overrideMonthlyNet: 2000),
       ],
       expenses: const [
-        Expense(id: 'food', name: 'Food', amount: 300),
+        Expense(id: 'food', name: 'Food', amount: 300, trackable: true),
       ],
     );
 
@@ -197,9 +223,7 @@ void main() {
     // Set actuals: income matched, food over budget
     final actuals = await repo.getBudgetActuals('2026-04');
     for (final a in actuals) {
-      if (a.categoryType == ActualCategoryType.income) {
-        await repo.saveBudgetActual(a.copyWith(actual: 2000));
-      } else if (a.categoryId == 'food') {
+      if (a.categoryId == 'food') {
         await repo.saveBudgetActual(a.copyWith(actual: 450));
       }
     }
@@ -220,7 +244,7 @@ void main() {
         IncomeSource(id: 'salary', name: 'Salary', annualGross: 24000, overrideMonthlyNet: 2000),
       ],
       expenses: const [
-        Expense(id: 'food', name: 'Food', amount: 300),
+        Expense(id: 'food', name: 'Food', amount: 300, trackable: true),
       ],
     );
 
@@ -229,16 +253,14 @@ void main() {
 
     final actuals = await repo.getBudgetActuals('2026-06');
     for (final a in actuals) {
-      if (a.categoryType == ActualCategoryType.income) {
-        await repo.saveBudgetActual(a.copyWith(actual: 2000));
-      } else {
+      if (a.categoryType == ActualCategoryType.expense) {
         await repo.saveBudgetActual(a.copyWith(actual: 250));
       }
     }
 
     final summary = await builder(year: 2026, month: 6);
     expect(summary.isOverBudget, false);
-    expect(summary.netVariance, 50); // 50 under on expenses
+    expect(summary.netVariance, 0);
     expect(summary.overBudgetItems, isEmpty);
   });
 

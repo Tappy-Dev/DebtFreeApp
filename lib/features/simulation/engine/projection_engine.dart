@@ -125,15 +125,27 @@ class ProjectionEngine {
             0,
             (double sum, ScenarioChange change) => sum + change.amount,
           );
-      final extraPayment = activeChanges
+      final globalExtraBudget = activeChanges
           .where(
             (ScenarioChange change) =>
-                change.changeType == ChangeType.extraPayment,
+                change.changeType == ChangeType.extraPayment &&
+                (change.debtId == null || change.debtId!.isEmpty),
           )
           .fold<double>(
             0,
             (double sum, ScenarioChange change) => sum + change.amount,
           );
+      final perDebtScenarioExtra = <String, double>{};
+      for (final change in activeChanges) {
+        if (change.changeType != ChangeType.extraPayment) continue;
+        final debtId = change.debtId;
+        if (debtId == null || debtId.isEmpty) continue;
+        perDebtScenarioExtra.update(
+          debtId,
+          (value) => value + change.amount,
+          ifAbsent: () => change.amount,
+        );
+      }
 
       final prioritized = _prioritizeDebts(activeDebts, strategy);
 
@@ -147,8 +159,10 @@ class ProjectionEngine {
 
       final monthlyCashBeforeDebt =
           baseIncome + incomeBoost - (baseExpenses - expenseReduction);
-      double remainingBudget = math.max(0.0, monthlyCashBeforeDebt) + extraPayment;
+        double remainingBudget =
+          math.max(0.0, monthlyCashBeforeDebt) + globalExtraBudget;
       double totalPayment = 0;
+        double remainingGlobalExtra = globalExtraBudget;
 
       for (final DebtAccount debt in prioritized) {
         final minimumPayment = math.min(debt.balance, debt.currentMinPayment());
@@ -157,16 +171,36 @@ class ProjectionEngine {
         );
         totalPayment += paymentApplied;
         remainingBudget -= paymentApplied;
+
+        final scheduledDebtExtra = debt.extraPayments.fold<double>(
+          0,
+          (sum, extra) =>
+              _monthInRange(month, extra.startDate, extra.endDate)
+                  ? sum + extra.amount
+                  : sum,
+        );
+        final scenarioDebtExtra = perDebtScenarioExtra[debt.id] ?? 0.0;
+        final targetedExtraBudget = scheduledDebtExtra + scenarioDebtExtra;
+        if (targetedExtraBudget > 0 && remainingBudget > 0) {
+          final targetedApplied = debt.makePayment(
+            math.min(targetedExtraBudget, remainingBudget),
+          );
+          totalPayment += targetedApplied;
+          remainingBudget -= targetedApplied;
+        }
       }
 
+      // Apply ONLY explicit global extra budget across prioritized debts.
       for (final DebtAccount debt in prioritized) {
-        if (remainingBudget <= 0) {
+        if (remainingGlobalExtra <= 0 || remainingBudget <= 0) {
           break;
         }
 
-        final paymentApplied = debt.makePayment(remainingBudget);
-        totalPayment += paymentApplied;
-        remainingBudget -= paymentApplied;
+        final availableExtra = math.min(remainingGlobalExtra, remainingBudget);
+        final applied = debt.makePayment(availableExtra);
+        totalPayment += applied;
+        remainingBudget -= applied;
+        remainingGlobalExtra -= applied;
       }
 
       final totalDebtRemaining = workingDebts.fold<double>(
@@ -237,5 +271,12 @@ class ProjectionEngine {
         scenarioDate.month;
 
     return difference < 0 ? 0 : difference;
+  }
+
+  bool _monthInRange(DateTime month, DateTime start, DateTime end) {
+    final m = month.year * 12 + month.month;
+    final s = start.year * 12 + start.month;
+    final e = end.year * 12 + end.month;
+    return m >= s && m <= e;
   }
 }

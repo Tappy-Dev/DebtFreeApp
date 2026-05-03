@@ -36,7 +36,7 @@ class DriftFinancialDatabase extends GeneratedDatabase {
   late final AppSettingsDao appSettingsDao = AppSettingsDao(this);
 
   @override
-  int get schemaVersion => 24;
+  int get schemaVersion => 27;
 
   @override
   Iterable<TableInfo> get allTables => const <TableInfo>[];
@@ -265,6 +265,66 @@ class DriftFinancialDatabase extends GeneratedDatabase {
             DriftSchema.addCarriedForwardBalanceToBudgetPeriods,
           );
         }
+        if (from < 25) {
+          await _ensureColumnExists(
+            DriftSchema.mortgageTable,
+            'ownership_type',
+            DriftSchema.addMortgageOwnershipTypeColumn,
+          );
+          await _ensureColumnExists(
+            DriftSchema.mortgageTable,
+            'repayment_type',
+            DriftSchema.addMortgageRepaymentTypeColumn,
+          );
+          await _ensureColumnExists(
+            DriftSchema.mortgageTable,
+            'owned_share_percent',
+            DriftSchema.addMortgageOwnedSharePercentColumn,
+          );
+          await _ensureColumnExists(
+            DriftSchema.mortgageTable,
+            'monthly_rent',
+            DriftSchema.addMortgageMonthlyRentColumn,
+          );
+          await _ensureColumnExists(
+            DriftSchema.mortgageTable,
+            'monthly_service_charge',
+            DriftSchema.addMortgageMonthlyServiceChargeColumn,
+          );
+          await _ensureColumnExists(
+            DriftSchema.mortgageTable,
+            'monthly_ground_rent',
+            DriftSchema.addMortgageMonthlyGroundRentColumn,
+          );
+        }
+        if (from < 26) {
+          await _ensureColumnExists(
+            DriftSchema.mortgageTable,
+            'start_date',
+            DriftSchema.addMortgageStartDateColumn,
+          );
+          await _ensureColumnExists(
+            DriftSchema.mortgageTable,
+            'original_loan_amount',
+            DriftSchema.addMortgageOriginalLoanAmountColumn,
+          );
+          await _ensureColumnExists(
+            DriftSchema.mortgageTable,
+            'mortgage_term_months',
+            DriftSchema.addMortgageTermMonthsColumn,
+          );
+          // Backfill with placeholder values; users should update
+          await customStatement(
+            'UPDATE mortgage SET original_loan_amount = balance WHERE original_loan_amount = 0',
+          );
+        }
+        if (from < 27) {
+          await _ensureColumnExists(
+            DriftSchema.mortgageTable,
+            'overpayment_start_date',
+            DriftSchema.addMortgageOverpaymentStartDateColumn,
+          );
+        }
       },
       beforeOpen: (OpeningDetails details) async {
         await ensureDebtColumns();
@@ -302,6 +362,10 @@ class DriftFinancialDatabase extends GeneratedDatabase {
       DriftSchema.scenarioDurationInMonthsColumn,
     )) {
       await customStatement(DriftSchema.addScenarioDurationInMonthsColumn);
+    }
+
+    if (!existingColumns.contains(DriftSchema.scenarioDebtIdColumn)) {
+      await customStatement(DriftSchema.addScenarioDebtIdColumn);
     }
   }
 

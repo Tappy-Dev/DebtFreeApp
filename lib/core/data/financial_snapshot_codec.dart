@@ -31,7 +31,8 @@ class FinancialSnapshotCodec {
       <String, dynamic>{
         'debts': snapshot.debts.map(_debtToJson).toList(growable: false),
         'income': snapshot.income.map(_incomeToJson).toList(growable: false),
-        'expenses': snapshot.expenses.map(_expenseToJson).toList(growable: false),
+        'expenses':
+            snapshot.expenses.map(_expenseToJson).toList(growable: false),
         'bills': snapshot.bills.map(_expenseToJson).toList(growable: false),
         'scenarioChanges': snapshot.scenarioChanges
             .map(_scenarioChangeToJson)
@@ -58,13 +59,13 @@ class FinancialSnapshotCodec {
       bills: ((json['bills'] as List<dynamic>? ?? const <dynamic>[]))
           .map((dynamic item) => _expenseFromJson(item as Map<String, dynamic>))
           .toList(growable: false),
-      scenarioChanges: ((json['scenarioChanges'] as List<dynamic>? ??
-              const <dynamic>[]))
-          .map(
-            (dynamic item) =>
-                _scenarioChangeFromJson(item as Map<String, dynamic>),
-          )
-          .toList(growable: false),
+      scenarioChanges:
+          ((json['scenarioChanges'] as List<dynamic>? ?? const <dynamic>[]))
+              .map(
+                (dynamic item) =>
+                    _scenarioChangeFromJson(item as Map<String, dynamic>),
+              )
+              .toList(growable: false),
       mortgage: json['mortgage'] == null
           ? null
           : _mortgageFromJson(json['mortgage'] as Map<String, dynamic>),
@@ -106,7 +107,7 @@ class FinancialSnapshotCodec {
       loanEndDate: json['loanEndDate'] == null
           ? null
           : DateTime.parse(json['loanEndDate'] as String),
-        originalBalance: (json['originalBalance'] as num?)?.toDouble(),
+      originalBalance: (json['originalBalance'] as num?)?.toDouble(),
       minPaymentRule: MinPaymentRule(
         type: _parseMinPaymentType(json['minPaymentType'] as String?),
         percentage: (json['minPaymentPercentage'] as num?)?.toDouble() ?? 1.0,
@@ -166,18 +167,18 @@ class FinancialSnapshotCodec {
       annualGross: (json['annualGross'] as num?)?.toDouble() ??
           ((json['amount'] as num?)?.toDouble() ?? 0) * 12,
       studentLoanPlan: plan,
-        monthlyPensionSacrifice:
+      monthlyPensionSacrifice:
           (json['monthlyPensionSacrifice'] as num?)?.toDouble() ?? 0,
-        monthlyCarSacrifice:
+      monthlyCarSacrifice:
           (json['monthlyCarSacrifice'] as num?)?.toDouble() ?? 0,
-        monthlyOtherSacrifice:
+      monthlyOtherSacrifice:
           (json['monthlyOtherSacrifice'] as num?)?.toDouble() ?? 0,
       monthlyTaxableBenefits:
-        (json['monthlyTaxableBenefits'] as num?)?.toDouble() ?? 0,
+          (json['monthlyTaxableBenefits'] as num?)?.toDouble() ?? 0,
       monthlyNiableBenefits:
-        (json['monthlyNiableBenefits'] as num?)?.toDouble() ?? 0,
+          (json['monthlyNiableBenefits'] as num?)?.toDouble() ?? 0,
       monthlyStudentLoanableBenefits:
-        (json['monthlyStudentLoanableBenefits'] as num?)?.toDouble() ?? 0,
+          (json['monthlyStudentLoanableBenefits'] as num?)?.toDouble() ?? 0,
     );
   }
 
@@ -224,11 +225,22 @@ class FinancialSnapshotCodec {
     return <String, dynamic>{
       'id': mortgage.id,
       'name': mortgage.name,
-      'balance': mortgage.balance,
+      'startDateMs': mortgage.startDate.millisecondsSinceEpoch,
+      'originalLoanAmount': mortgage.originalLoanAmount,
+      'mortgageTermMonths': mortgage.mortgageTermMonths,
       'annualRate': mortgage.annualRate,
       'monthlyPayment': mortgage.monthlyPayment,
-      'remainingTermMonths': mortgage.remainingTermMonths,
       'overpayment': mortgage.overpayment,
+      'overpaymentStartDateMs':
+          mortgage.overpaymentStartDate?.millisecondsSinceEpoch,
+      'paymentDay': mortgage.paymentDay,
+      'dealEndDateMs': mortgage.dealEndDate?.millisecondsSinceEpoch,
+      'ownershipType': mortgage.ownershipType.name,
+      'repaymentType': mortgage.repaymentType.name,
+      'ownedSharePercent': mortgage.ownedSharePercent,
+      'monthlyRent': mortgage.monthlyRent,
+      'monthlyServiceCharge': mortgage.monthlyServiceCharge,
+      'monthlyGroundRent': mortgage.monthlyGroundRent,
     };
   }
 
@@ -236,12 +248,42 @@ class FinancialSnapshotCodec {
     return Mortgage(
       id: json['id'] as String? ?? 'mortgage',
       name: json['name'] as String? ?? 'Mortgage',
-      balance: (json['balance'] as num?)?.toDouble() ?? 0,
+      startDate: (json['startDateMs'] as num?) != null
+          ? DateTime.fromMillisecondsSinceEpoch(
+              (json['startDateMs'] as num).toInt(),
+            )
+          : DateTime(2024, 1, 1),
+      originalLoanAmount:
+          (json['originalLoanAmount'] as num?)?.toDouble() ?? 0,
+      mortgageTermMonths:
+          (json['mortgageTermMonths'] as num?)?.toInt() ?? 360,
       annualRate: (json['annualRate'] as num?)?.toDouble() ?? 0,
       monthlyPayment: (json['monthlyPayment'] as num?)?.toDouble() ?? 0,
-      remainingTermMonths: (json['remainingTermMonths'] as num?)?.toInt() ?? 0,
       overpayment: (json['overpayment'] as num?)?.toDouble() ?? 0,
+      overpaymentStartDate: (json['overpaymentStartDateMs'] as num?) != null
+          ? DateTime.fromMillisecondsSinceEpoch(
+              (json['overpaymentStartDateMs'] as num).toInt(),
+            )
+          : null,
+      paymentDay: (json['paymentDay'] as num?)?.toInt() ?? 1,
+      dealEndDate: (json['dealEndDateMs'] as num?) != null
+          ? DateTime.fromMillisecondsSinceEpoch(
+              (json['dealEndDateMs'] as num).toInt(),
+            )
+          : null,
+      ownershipType: MortgageOwnershipType.values.firstWhere(
+        (type) => type.name == json['ownershipType'],
+        orElse: () => MortgageOwnershipType.standard,
+      ),
+      repaymentType: MortgageRepaymentType.values.firstWhere(
+        (type) => type.name == json['repaymentType'],
+        orElse: () => MortgageRepaymentType.repayment,
+      ),
+      ownedSharePercent: (json['ownedSharePercent'] as num?)?.toDouble() ?? 100,
+      monthlyRent: (json['monthlyRent'] as num?)?.toDouble() ?? 0,
+      monthlyServiceCharge:
+          (json['monthlyServiceCharge'] as num?)?.toDouble() ?? 0,
+      monthlyGroundRent: (json['monthlyGroundRent'] as num?)?.toDouble() ?? 0,
     );
   }
-
 }

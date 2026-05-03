@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:debt_free_app/core/data/session_financial_repository.dart';
 import 'package:debt_free_app/core/services/ai_usage_service.dart';
 import 'package:debt_free_app/core/services/subscription_service.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:http/http.dart' as http;
@@ -301,8 +302,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
               ),
             ),
-            const SizedBox(height: 16),
+            if (!kReleaseMode) const SizedBox(height: 16),
             // ── Developer Mode ──
+            if (!kReleaseMode)
             Card(
               child: Padding(
                 padding: const EdgeInsets.all(20),

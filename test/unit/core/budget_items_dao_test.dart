@@ -33,7 +33,7 @@ void main() {
 
     expect(incomeSources, hasLength(1));
     expect(incomeSources.first.id, 'salary');
-    expect(incomeSources.first.amount, 3200);
+    expect(incomeSources.first.annualGross, 38400);
     expect(expenses, hasLength(1));
     expect(expenses.first.id, 'rent');
     expect(expenses.first.amount, 1200);
@@ -72,6 +72,6 @@ void main() {
 
     expect(incomeSources, hasLength(1));
     expect(incomeSources.single.name, 'Updated Salary');
-    expect(incomeSources.single.amount, 3500);
+    expect(incomeSources.single.annualGross, 42000);
   });
 }

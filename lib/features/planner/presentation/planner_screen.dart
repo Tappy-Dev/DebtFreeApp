@@ -5,6 +5,7 @@ import 'package:debt_free_app/core/utils/amount_parser.dart';
 import 'package:debt_free_app/features/budget/domain/build_budget_snapshot.dart';
 import 'package:debt_free_app/features/planner/models/planner_event.dart';
 import 'package:debt_free_app/features/planner/presentation/advisor_result_screen.dart';
+import 'package:debt_free_app/features/subscription/presentation/paywall_screen.dart';
 import 'package:debt_free_app/features/tracking/domain/build_monthly_budget_summary.dart';
 import 'package:debt_free_app/features/tracking/models/monthly_budget_summary.dart';
 import 'package:debt_free_app/shared/widgets/app_shell_scaffold.dart';
@@ -185,7 +186,7 @@ class _PlannerScreenState extends State<PlannerScreen> {
   Widget _buildAdvisorSection(BuildContext context) {
     final theme = Theme.of(context);
     final sub = SubscriptionService.instance;
-    final isEntitled = sub.isEntitled;
+    final isSubscribed = sub.isSubscribed;
     
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -216,7 +217,7 @@ class _PlannerScreenState extends State<PlannerScreen> {
         const SizedBox(height: 16),
 
         // Premium lock gate
-        if (!isEntitled)
+        if (!isSubscribed)
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
@@ -226,18 +227,35 @@ class _PlannerScreenState extends State<PlannerScreen> {
                 color: theme.colorScheme.primary.withValues(alpha: 0.3),
               ),
             ),
-            child: Row(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Icon(Icons.workspace_premium_rounded,
-                    size: 18, color: theme.colorScheme.primary),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    'Subscribe to unlock AI-powered budget insights.',
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.primary,
+                Row(
+                  children: [
+                    Icon(Icons.workspace_premium_rounded,
+                        size: 18, color: theme.colorScheme.primary),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        sub.isTrialActive
+                            ? 'AI features are not included in the free trial. Subscribe to unlock.'
+                            : 'Subscribe to unlock AI-powered budget insights.',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.primary,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                FilledButton.icon(
+                  onPressed: () => Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => const PaywallScreen(),
                     ),
                   ),
+                  icon: const Icon(Icons.workspace_premium_rounded, size: 16),
+                  label: const Text('Subscribe now'),
                 ),
               ],
             ),
@@ -325,7 +343,7 @@ class _PlannerScreenState extends State<PlannerScreen> {
 
   Future<void> _openAdvisorResult(_AdvisorPrompt prompt) async {
     final sub = SubscriptionService.instance;
-    if (!sub.isEntitled) return; // Guard: not entitled
+    if (!sub.isSubscribed) return; // Guard: requires active subscription
     
     final summary = await _buildFinancialSummary();
     if (!mounted) {

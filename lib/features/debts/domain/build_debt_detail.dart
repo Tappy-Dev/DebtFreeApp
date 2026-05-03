@@ -9,14 +9,17 @@ class BuildDebtDetail {
   DebtDetail call({
     required DebtAccount debt,
     double extraPayment = 0,
+    DateTime? referenceDate,
     int maxMonths = 600,
   }) {
+    final refDate = referenceDate ?? DateTime.now();
     final baseline = _simulate(
       balance: debt.balance,
       apr: debt.apr,
       rule: debt.minPaymentRule,
       fixedMinPayment: debt.minimumPayment,
       extraPayment: 0,
+      referenceDate: refDate,
       maxMonths: maxMonths,
     );
 
@@ -26,6 +29,7 @@ class BuildDebtDetail {
       rule: debt.minPaymentRule,
       fixedMinPayment: debt.minimumPayment,
       extraPayment: extraPayment,
+      referenceDate: refDate,
       maxMonths: maxMonths,
     );
 
@@ -38,11 +42,11 @@ class BuildDebtDetail {
       balance: debt.balance,
       apr: debt.apr,
       minimumPayment: debt.currentMinPayment(),
-      payoffDateLabel: _formatPayoffDate(baseline.months),
+      payoffDateLabel: _formatPayoffDate(baseline.months, refDate),
       totalInterest: baseline.totalInterest,
       monthsToPayoff: baseline.months,
       chartData: baseline.chartData,
-      overpaymentPayoffDateLabel: _formatPayoffDate(overpayment.months),
+      overpaymentPayoffDateLabel: _formatPayoffDate(overpayment.months, refDate),
       overpaymentTotalInterest: overpayment.totalInterest,
       overpaymentMonthsToPayoff: overpayment.months,
       overpaymentMonthsSaved: monthsSaved,
@@ -57,6 +61,7 @@ class BuildDebtDetail {
     required MinPaymentRule rule,
     required double fixedMinPayment,
     required double extraPayment,
+    required DateTime referenceDate,
     required int maxMonths,
   }) {
     if (balance <= 0) {
@@ -68,7 +73,7 @@ class BuildDebtDetail {
     }
 
     final monthFormat = DateFormat('MMM yy');
-    final now = DateTime.now();
+  final now = DateTime(referenceDate.year, referenceDate.month);
     double remaining = balance;
     double totalInterest = 0;
     final chartData = <TimelineDataPoint>[];
@@ -109,12 +114,12 @@ class BuildDebtDetail {
     );
   }
 
-  String _formatPayoffDate(int months) {
+  String _formatPayoffDate(int months, DateTime referenceDate) {
     if (months <= 0) {
       return 'Already paid off';
     }
 
-    final now = DateTime.now();
+    final now = DateTime(referenceDate.year, referenceDate.month);
     final payoffDate = DateTime(now.year, now.month + months);
     return DateFormat.yMMM().format(payoffDate);
   }

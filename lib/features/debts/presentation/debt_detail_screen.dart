@@ -25,6 +25,7 @@ class _DebtDetailScreenState extends State<DebtDetailScreen> {
   final _repository = SessionFinancialRepository.instance;
   double _extraPayment = 0;
   double _savedExtraPayment = 0;
+  static const int _recurringExtraEndYear = 2100;
 
   final _currency = NumberFormat.currency(
     locale: 'en_GB',
@@ -42,10 +43,46 @@ class _DebtDetailScreenState extends State<DebtDetailScreen> {
     return null;
   }
 
+  String get _recurringExtraPaymentId => 'recurring-extra-${widget.debtId}';
+
+  DebtExtraPayment? _recurringExtraPaymentFor(DebtAccount debt) {
+    for (final extra in debt.extraPayments) {
+      if (extra.id == _recurringExtraPaymentId) {
+        return extra;
+      }
+    }
+    return null;
+  }
+
+  bool _isRecurringActiveAt(DateTime month, DebtExtraPayment recurring) {
+    final m = month.year * 12 + month.month;
+    final s = recurring.startDate.year * 12 + recurring.startDate.month;
+    final e = recurring.endDate.year * 12 + recurring.endDate.month;
+    return m >= s && m <= e;
+  }
+
+  List<DebtExtraPayment> _additionalExtraPaymentsFor(DebtAccount debt) {
+    return debt.extraPayments
+        .where((extra) => extra.id != _recurringExtraPaymentId)
+        .toList(growable: false);
+  }
+
   @override
   void initState() {
     super.initState();
-    // Load any existing extra payment for THIS debt from scenario
+    final debt = _debt;
+    final recurring = debt == null ? null : _recurringExtraPaymentFor(debt);
+    if (recurring != null) {
+      final effectiveMonth = DateTime(
+        _repository.effectiveNow.year,
+        _repository.effectiveNow.month,
+      );
+      final recurringActive = _isRecurringActiveAt(effectiveMonth, recurring);
+      _extraPayment = recurringActive ? recurring.amount : 0;
+      _savedExtraPayment = _extraPayment;
+      return;
+    }
+
     final changes = _repository.getScenarioChanges();
     for (final change in changes) {
       if (change.changeType == ChangeType.extraPayment &&
@@ -58,6 +95,9 @@ class _DebtDetailScreenState extends State<DebtDetailScreen> {
   }
 
   void _applyExtraPayment() {
+    final debt = _debt;
+    if (debt == null) return;
+
     final changes = _repository.getScenarioChanges();
     final updated = <ScenarioChange>[
       ...changes.where((c) =>
@@ -72,6 +112,28 @@ class _DebtDetailScreenState extends State<DebtDetailScreen> {
         ),
     ];
     _repository.saveScenarioChanges(updated);
+
+    final existingRecurring = _recurringExtraPaymentFor(debt);
+    DateTime? appliedFrom;
+    if (_extraPayment > 0) {
+      final start = DateTime(
+        _repository.effectiveNow.year,
+        _repository.effectiveNow.month,
+      );
+      appliedFrom = start;
+      _repository.saveDebtExtraPayment(
+        DebtExtraPayment(
+          id: _recurringExtraPaymentId,
+          debtId: debt.id,
+          amount: _extraPayment,
+          startDate: start,
+          endDate: DateTime(_recurringExtraEndYear, 12),
+        ),
+      );
+    } else if (existingRecurring != null) {
+      _repository.deleteDebtExtraPayment(existingRecurring.id, debt.id);
+    }
+
     setState(() {
       _savedExtraPayment = _extraPayment;
     });
@@ -80,7 +142,7 @@ class _DebtDetailScreenState extends State<DebtDetailScreen> {
       ..showSnackBar(
         SnackBar(
           content: Text(_extraPayment > 0
-              ? 'Extra payment of ${_currency.format(_extraPayment)}/mo applied'
+              ? 'Extra payment of ${_currency.format(_extraPayment)}/mo applied from ${_dateFormat.format(appliedFrom!)}'
               : 'Extra payment removed'),
           behavior: SnackBarBehavior.floating,
         ),
@@ -97,14 +159,23 @@ class _DebtDetailScreenState extends State<DebtDetailScreen> {
       );
     }
 
+    final recurringExtraPayment = _recurringExtraPaymentFor(debt);
+    final effectiveMonth = DateTime(
+      _repository.effectiveNow.year,
+      _repository.effectiveNow.month,
+    );
+    final recurringActive = recurringExtraPayment != null &&
+        _isRecurringActiveAt(effectiveMonth, recurringExtraPayment);
     final detail = BuildDebtDetail()(
       debt: debt,
       extraPayment: _extraPayment,
+      referenceDate: _repository.effectiveNow,
     );
     final theme = Theme.of(context);
     final maxSlider = math.max(debt.currentMinPayment() * 5, 500.0);
     final monthlyInterest = debt.calculateMonthlyInterest();
-    final currentBal = debt.currentProjectedBalance();
+    final currentBal = debt.currentProjectedBalance(_repository.effectiveNow);
+    final additionalExtraPayments = _additionalExtraPaymentsFor(debt);
     final aprColor = debt.apr >= 30
         ? theme.colorScheme.error
         : debt.apr >= 20
@@ -332,6 +403,31 @@ class _DebtDetailScreenState extends State<DebtDetailScreen> {
                                 ?.copyWith(fontWeight: FontWeight.w600)),
                       ],
                     ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Use the slider to set your regular monthly extra payment from now on. It updates your payoff projection and the extra debt payment used in budget totals.',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                    if (recurringExtraPayment != null && recurringActive) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        'Currently applied from ${_dateFormat.format(recurringExtraPayment.startDate)}.',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                    if (recurringExtraPayment != null && !recurringActive) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        'Scheduled to start ${_dateFormat.format(recurringExtraPayment.startDate)}. Not active in this month.',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
                     const SizedBox(height: 16),
                     MoneyInputSlider(
                       label: 'Extra monthly payment',
@@ -388,7 +484,7 @@ class _DebtDetailScreenState extends State<DebtDetailScreen> {
                       onPressed: hasUnsavedChanges ? _applyExtraPayment : null,
                       icon: const Icon(Icons.check, size: 18),
                       label: Text(hasUnsavedChanges
-                          ? 'Apply Extra Payment'
+                          ? 'Apply Recurring Extra Payment'
                           : 'Applied'),
                       style: FilledButton.styleFrom(
                         minimumSize: const Size.fromHeight(48),
@@ -400,7 +496,7 @@ class _DebtDetailScreenState extends State<DebtDetailScreen> {
             ),
             const SizedBox(height: 16),
 
-            // ── Extra Payment Periods ──
+            // ── Additional Extra Payment Periods ──
             Card(
               elevation: 0,
               shape: RoundedRectangleBorder(
@@ -418,7 +514,7 @@ class _DebtDetailScreenState extends State<DebtDetailScreen> {
                             size: 18, color: theme.colorScheme.tertiary),
                         const SizedBox(width: 8),
                         Expanded(
-                          child: Text('Extra Payment Periods',
+                          child: Text('Additional Extra Payment Periods',
                               style: theme.textTheme.titleSmall
                                   ?.copyWith(fontWeight: FontWeight.w600)),
                         ),
@@ -430,18 +526,18 @@ class _DebtDetailScreenState extends State<DebtDetailScreen> {
                         ),
                       ],
                     ),
-                    if (debt.extraPayments.isEmpty)
+                    if (additionalExtraPayments.isEmpty)
                       Padding(
                         padding: const EdgeInsets.only(top: 8),
                         child: Text(
-                          'No extra payment periods. Tap + to schedule recurring extra payments for specific date ranges.',
+                          'No additional timed boosts. The slider above controls your regular recurring extra payment. Tap + to add temporary date-range boosts.',
                           style: theme.textTheme.bodySmall?.copyWith(
                             color: theme.colorScheme.onSurfaceVariant,
                           ),
                         ),
                       )
                     else
-                      ...debt.extraPayments.map((ep) => Padding(
+                      ...additionalExtraPayments.map((ep) => Padding(
                             padding: const EdgeInsets.only(top: 8),
                             child: Container(
                               padding: const EdgeInsets.all(12),
@@ -513,10 +609,11 @@ class _DebtDetailScreenState extends State<DebtDetailScreen> {
   void _showExtraPaymentDialog(DebtAccount debt, [DebtExtraPayment? existing]) {
     final amountController = TextEditingController(
         text: existing != null ? existing.amount.toStringAsFixed(2) : '');
+    final now = _repository.effectiveNow;
     var startDate = existing?.startDate ??
-        DateTime(DateTime.now().year, DateTime.now().month);
+      DateTime(now.year, now.month);
     var endDate = existing?.endDate ??
-        DateTime(DateTime.now().year, DateTime.now().month + 6);
+      DateTime(now.year, now.month + 6);
 
     showDialog(
       context: context,

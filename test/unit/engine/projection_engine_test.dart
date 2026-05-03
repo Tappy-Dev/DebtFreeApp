@@ -13,7 +13,7 @@ void main() {
       projectionEngine = ProjectionEngine();
     });
 
-    test('should calculate cash flow projection correctly', () {
+    test('should not implicitly route surplus income into extra debt payments', () {
       final debts = <DebtAccount>[
         DebtAccount(
           id: '1',
@@ -44,7 +44,7 @@ void main() {
       );
 
       expect(result.monthlyBreakdown, isNotEmpty);
-      expect(result.totalInterestSaved, greaterThan(0));
+      expect(result.totalInterestSaved, equals(0));
       expect(result.updatedPayoffDate, isNotNull);
     });
 
@@ -173,8 +173,10 @@ void main() {
       );
 
       expect(result.monthlyBreakdown, hasLength(2));
-      expect(result.monthlyBreakdown[0].totalPayment, 100);
-      expect(result.monthlyBreakdown[1].totalPayment, 200);
+      // Month 0: minimum payment only because extra starts at month 1.
+      expect(result.monthlyBreakdown[0].totalPayment, 50);
+      // Month 1: minimum payment + explicit global extra payment.
+      expect(result.monthlyBreakdown[1].totalPayment, 150);
     });
 
     test('should stop applying a temporary scenario after its duration ends', () {
@@ -208,8 +210,10 @@ void main() {
       );
 
       expect(result.monthlyBreakdown, hasLength(2));
-      expect(result.monthlyBreakdown[0].totalPayment, 150);
-      expect(result.monthlyBreakdown[1].totalPayment, 100);
+      // Month 0: minimum payment + explicit temporary extra.
+      expect(result.monthlyBreakdown[0].totalPayment, 100);
+      // Month 1: temporary extra has expired.
+      expect(result.monthlyBreakdown[1].totalPayment, 50);
     });
   });
 }

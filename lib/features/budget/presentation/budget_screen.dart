@@ -6,6 +6,7 @@ import 'package:debt_free_app/core/utils/financial_month.dart';
 import 'package:debt_free_app/features/budget/domain/build_budget_snapshot.dart';
 import 'package:debt_free_app/features/simulation/models/expense.dart';
 import 'package:debt_free_app/features/simulation/models/income_source.dart';
+import 'package:debt_free_app/features/simulation/models/mortgage.dart';
 import 'package:debt_free_app/shared/widgets/app_shell_scaffold.dart';
 import 'package:debt_free_app/shared/widgets/empty_state_card.dart';
 import 'package:flutter/material.dart';
@@ -99,7 +100,10 @@ class _BudgetScreenState extends State<BudgetScreen> {
     final parts = _selectedMonth.split('-');
     var year = int.parse(parts[0]);
     var month = int.parse(parts[1]) - 1;
-    if (month < 1) { month = 12; year--; }
+    if (month < 1) {
+      month = 12;
+      year--;
+    }
     final prevKey = '${year}-${month.toString().padLeft(2, '0')}';
     return _isMonthAllowed(prevKey);
   }
@@ -270,11 +274,16 @@ class _BudgetScreenState extends State<BudgetScreen> {
           // ── Why monthly? collapsible ──
           _WhyMonthlyCard(
             expanded: _whyMonthlyExpanded,
-            onToggle: () => setState(() => _whyMonthlyExpanded = !_whyMonthlyExpanded),
+            onToggle: () =>
+                setState(() => _whyMonthlyExpanded = !_whyMonthlyExpanded),
           ),
           const SizedBox(height: 12),
           // ── Copy / Clear month (top actions) ──
-          if (!isClosed && (!isCurrentMonth || income.isNotEmpty || bills.isNotEmpty || expenses.isNotEmpty))
+          if (!isClosed &&
+              (!isCurrentMonth ||
+                  income.isNotEmpty ||
+                  bills.isNotEmpty ||
+                  expenses.isNotEmpty))
             Padding(
               padding: const EdgeInsets.only(bottom: 0),
               child: Row(
@@ -286,8 +295,10 @@ class _BudgetScreenState extends State<BudgetScreen> {
                       style: FilledButton.styleFrom(
                         backgroundColor: colorScheme.primary,
                         foregroundColor: colorScheme.onPrimary,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10)),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 12),
                       ),
                       onPressed: _copyToNextMonth,
                     ),
@@ -299,8 +310,10 @@ class _BudgetScreenState extends State<BudgetScreen> {
                     style: FilledButton.styleFrom(
                       backgroundColor: colorScheme.error,
                       foregroundColor: colorScheme.onError,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10)),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 12),
                     ),
                     onPressed: _clearMonth,
                   ),
@@ -342,182 +355,206 @@ class _BudgetScreenState extends State<BudgetScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-          // ── Income ──
-          _SectionHeader(
-            title: 'Income',
-            amount: currency.format(snapshot.totalIncome),
-            icon: Icons.account_balance_wallet_outlined,
-            actionLabel: 'Add income',
-            onPressed: _openNewIncomeForm,
-          ),
-          const SizedBox(height: 8),
-          if (regularIncome.isEmpty) ...<Widget>[
-            const EmptyStateCard(title: 'No income sources yet', message: 'Add each income source separately — salary, freelance, rental income, etc.'),
-            const SizedBox(height: 8),
-          ],
-          for (final item in regularIncome) ...<Widget>[
-            () {
-              final linkedBonus = _findLinkedBonusForParent(item, income);
-              final bonusNet = linkedBonus == null
-                  ? null
-                  : (adjustedIncomeById[linkedBonus.id]?.amount ??
-                      resolvedMonthlyIncomeNet(linkedBonus, income));
-              final bonusGross = linkedBonus == null
-                  ? null
-                  : linkedBonus.annualGross / 12;
-              return _BudgetItemTile(
-                icon: Icons.payments_outlined,
-                iconColor: Colors.green.shade700,
-                name: item.name,
-                primaryValue:
-                    '${currency.format(adjustedIncomeById[item.id]?.amount ?? item.monthlyNetAfterSacrifice())}/mo net',
-                secondaryValue: '${currency.format(item.annualGross)}/yr gross',
-                bonusGross: bonusGross,
-                bonusNet: bonusNet,
-                onAddBonus:
-                    linkedBonus == null ? () => _promptAddBonus(item) : null,
-                onRemoveBonus: linkedBonus == null
-                    ? null
-                    : () => _removeBonus(linkedBonus, item.name),
-                onEdit: () => _openEditIncomeForm(item.id),
-                onDelete: () => _confirmDeleteIncome(item.id, item.name),
-              );
-            }(),
-            const SizedBox(height: 8),
-          ],
-          const SizedBox(height: 12),
-          // ── Bills ──
-          _SectionHeader(
-            title: 'Bills',
-            amount: currency.format(snapshot.totalBills),
-            icon: Icons.receipt_long_outlined,
-            actionLabel: 'Add bill',
-            onPressed: _openNewBillForm,
-          ),
-          const SizedBox(height: 8),
-          if (bills.isEmpty) ...<Widget>[
-            const EmptyStateCard(title: 'No bills yet', message: 'Add monthly bills (rent, utilities, subscriptions, etc.).'),
-            const SizedBox(height: 8),
-          ],
-          for (final item in bills) ...<Widget>[
-            _BudgetItemTile(
-              icon: Icons.receipt_outlined,
-              iconColor: colorScheme.error,
-              name: item.name,
-              primaryValue: '${currency.format(item.amount)}/mo',
-              secondaryValue: item.category.displayName,
-              onEdit: () => _openEditBillForm(item.id),
-              onDelete: () => _confirmDeleteBill(item.id, item.name),
-            ),
-            const SizedBox(height: 8),
-          ],
-          const SizedBox(height: 12),
-          // ── Subscriptions ──
-          _SectionHeader(
-            title: 'Subscriptions',
-            amount: currency.format(snapshot.totalSubscriptions),
-            icon: Icons.subscriptions_outlined,
-            actionLabel: 'Add subscription',
-            onPressed: _openNewSubscriptionForm,
-          ),
-          const SizedBox(height: 8),
-          if (subscriptions.isEmpty) ...<Widget>[
-            const EmptyStateCard(title: 'No subscriptions yet', message: 'Add recurring subscriptions (Netflix, Gym, Spotify, etc.).'),
-            const SizedBox(height: 8),
-          ],
-          for (final item in subscriptions) ...<Widget>[
-            _BudgetItemTile(
-              icon: Icons.repeat_outlined,
-              iconColor: Colors.purple.shade400,
-              name: item.name,
-              primaryValue: '${currency.format(item.amount)}/mo',
-              onEdit: () => _openEditSubscriptionForm(item.id),
-              onDelete: () => _confirmDeleteSubscription(item.id, item.name),
-            ),
-            const SizedBox(height: 8),
-          ],
-          const SizedBox(height: 12),
-          // ── Expenses ──
-          _SectionHeader(
-            title: 'Expenses',
-            amount: currency.format(snapshot.totalExpenses),
-            icon: Icons.shopping_cart_outlined,
-            actionLabel: 'Add expense',
-            onPressed: _openNewExpenseForm,
-          ),
-          const SizedBox(height: 8),
-          if (expenses.isEmpty) ...<Widget>[
-            const EmptyStateCard(title: 'No expenses yet', message: 'Add day-to-day spending by category — entertainment, transport, healthcare, and more.'),
-            const SizedBox(height: 8),
-          ],
-          for (final item in expenses) ...<Widget>[
-            _BudgetItemTile(
-              icon: Icons.shopping_bag_outlined,
-              iconColor: Colors.orange.shade700,
-              name: item.name,
-              primaryValue: '${currency.format(item.amount)}/mo',
-              secondaryValue: item.category.displayName,
-              badge: item.trackable ? 'Trackable' : null,
-              onEdit: () => _openEditExpenseForm(item.id),
-              onDelete: () => _confirmDeleteExpense(item.id, item.name),
-            ),
-            const SizedBox(height: 8),
-          ],
-          const SizedBox(height: 12),
-          // ── Savings ──
-          _SectionHeader(
-            title: 'Savings',
-            amount: currency.format(snapshot.totalSavings),
-            icon: Icons.savings_outlined,
-            actionLabel: 'Add savings',
-            onPressed: _openNewSavingsForm,
-          ),
-          const SizedBox(height: 8),
-          if (savings.isEmpty) ...<Widget>[
-            const EmptyStateCard(title: 'No savings pots yet', message: 'Add a monthly savings amount — emergency fund, holiday, home deposit — to factor it into your budget.'),
-            const SizedBox(height: 8),
-          ],
-          for (final item in savings) ...<Widget>[
-            _BudgetItemTile(
-              icon: Icons.savings_outlined,
-              iconColor: Colors.teal,
-              name: item.name,
-              primaryValue: '${currency.format(item.amount)}/mo',
-              secondaryValue: 'Savings',
-              onEdit: () => _openEditExpenseForm(item.id),
-              onDelete: () => _confirmDeleteExpense(item.id, item.name),
-            ),
-            const SizedBox(height: 8),
-          ],
-          const SizedBox(height: 12),
-          // ── Mortgage ──
-          _SectionHeader(
-            title: 'Mortgage',
-            amount: currency.format(snapshot.mortgagePayment),
-            icon: Icons.home_outlined,
-            actionLabel: 'Add mortgage',
-            onPressed: () => context.push('/mortgage'),
-          ),
-          const SizedBox(height: 8),
-          if (mortgages.isEmpty)
-            const EmptyStateCard(title: 'No mortgage added', message: 'Add your mortgage to track overpayments.')
-          else
-            ...mortgages.map(
-              (mortgage) => Padding(
-                padding: const EdgeInsets.only(bottom: 8),
-                child: _BudgetItemTile(
-                  icon: Icons.home_work_outlined,
-                  iconColor: colorScheme.primary,
-                  name: mortgage.name,
-                  primaryValue:
-                      '${currency.format(mortgage.totalMonthlyPayment)}/mo',
-                  secondaryValue:
-                      '${mortgage.annualRate.toStringAsFixed(2)}% rate  \u2022  ${currency.format(mortgage.balance)} balance',
-                  onEdit: () => context.push('/mortgage'),
-                ),
-              ),
-            ),
-          const SizedBox(height: 12),
+                  // ── Income ──
+                  _SectionHeader(
+                    title: 'Income',
+                    amount: currency.format(snapshot.totalIncome),
+                    icon: Icons.account_balance_wallet_outlined,
+                    actionLabel: 'Add income',
+                    onPressed: _openNewIncomeForm,
+                  ),
+                  const SizedBox(height: 8),
+                  if (regularIncome.isEmpty) ...<Widget>[
+                    const EmptyStateCard(
+                        title: 'No income sources yet',
+                        message:
+                            'Add each income source separately — salary, freelance, rental income, etc.'),
+                    const SizedBox(height: 8),
+                  ],
+                  for (final item in regularIncome) ...<Widget>[
+                    () {
+                      final linkedBonus =
+                          _findLinkedBonusForParent(item, income);
+                      final bonusNet = linkedBonus == null
+                          ? null
+                          : (adjustedIncomeById[linkedBonus.id]?.amount ??
+                              resolvedMonthlyIncomeNet(linkedBonus, income));
+                      final bonusGross = linkedBonus == null
+                          ? null
+                          : linkedBonus.annualGross / 12;
+                      return _BudgetItemTile(
+                        icon: Icons.payments_outlined,
+                        iconColor: Colors.green.shade700,
+                        name: item.name,
+                        primaryValue:
+                            '${currency.format(adjustedIncomeById[item.id]?.amount ?? item.monthlyNetAfterSacrifice())}/mo net',
+                        secondaryValue:
+                            '${currency.format(item.annualGross)}/yr gross',
+                        bonusGross: bonusGross,
+                        bonusNet: bonusNet,
+                        onAddBonus: linkedBonus == null
+                            ? () => _promptAddBonus(item)
+                            : null,
+                        onRemoveBonus: linkedBonus == null
+                            ? null
+                            : () => _removeBonus(linkedBonus, item.name),
+                        onEdit: () => _openEditIncomeForm(item.id),
+                        onDelete: () =>
+                            _confirmDeleteIncome(item.id, item.name),
+                      );
+                    }(),
+                    const SizedBox(height: 8),
+                  ],
+                  const SizedBox(height: 12),
+                  // ── Bills ──
+                  _SectionHeader(
+                    title: 'Bills',
+                    amount: currency.format(snapshot.totalBills),
+                    icon: Icons.receipt_long_outlined,
+                    actionLabel: 'Add bill',
+                    onPressed: _openNewBillForm,
+                  ),
+                  const SizedBox(height: 8),
+                  if (bills.isEmpty) ...<Widget>[
+                    const EmptyStateCard(
+                        title: 'No bills yet',
+                        message:
+                            'Add monthly bills (rent, utilities, subscriptions, etc.).'),
+                    const SizedBox(height: 8),
+                  ],
+                  for (final item in bills) ...<Widget>[
+                    _BudgetItemTile(
+                      icon: Icons.receipt_outlined,
+                      iconColor: colorScheme.error,
+                      name: item.name,
+                      primaryValue: '${currency.format(item.amount)}/mo',
+                      secondaryValue: item.category.displayName,
+                      onEdit: () => _openEditBillForm(item.id),
+                      onDelete: () => _confirmDeleteBill(item.id, item.name),
+                    ),
+                    const SizedBox(height: 8),
+                  ],
+                  const SizedBox(height: 12),
+                  // ── Subscriptions ──
+                  _SectionHeader(
+                    title: 'Subscriptions',
+                    amount: currency.format(snapshot.totalSubscriptions),
+                    icon: Icons.subscriptions_outlined,
+                    actionLabel: 'Add subscription',
+                    onPressed: _openNewSubscriptionForm,
+                  ),
+                  const SizedBox(height: 8),
+                  if (subscriptions.isEmpty) ...<Widget>[
+                    const EmptyStateCard(
+                        title: 'No subscriptions yet',
+                        message:
+                            'Add recurring subscriptions (Netflix, Gym, Spotify, etc.).'),
+                    const SizedBox(height: 8),
+                  ],
+                  for (final item in subscriptions) ...<Widget>[
+                    _BudgetItemTile(
+                      icon: Icons.repeat_outlined,
+                      iconColor: Colors.purple.shade400,
+                      name: item.name,
+                      primaryValue: '${currency.format(item.amount)}/mo',
+                      onEdit: () => _openEditSubscriptionForm(item.id),
+                      onDelete: () =>
+                          _confirmDeleteSubscription(item.id, item.name),
+                    ),
+                    const SizedBox(height: 8),
+                  ],
+                  const SizedBox(height: 12),
+                  // ── Expenses ──
+                  _SectionHeader(
+                    title: 'Expenses',
+                    amount: currency.format(snapshot.totalExpenses),
+                    icon: Icons.shopping_cart_outlined,
+                    actionLabel: 'Add expense',
+                    onPressed: _openNewExpenseForm,
+                  ),
+                  const SizedBox(height: 8),
+                  if (expenses.isEmpty) ...<Widget>[
+                    const EmptyStateCard(
+                        title: 'No expenses yet',
+                        message:
+                            'Add day-to-day spending by category — entertainment, transport, healthcare, and more.'),
+                    const SizedBox(height: 8),
+                  ],
+                  for (final item in expenses) ...<Widget>[
+                    _BudgetItemTile(
+                      icon: Icons.shopping_bag_outlined,
+                      iconColor: Colors.orange.shade700,
+                      name: item.name,
+                      primaryValue: '${currency.format(item.amount)}/mo',
+                      secondaryValue: item.category.displayName,
+                      badge: item.trackable ? 'Trackable' : null,
+                      onEdit: () => _openEditExpenseForm(item.id),
+                      onDelete: () => _confirmDeleteExpense(item.id, item.name),
+                    ),
+                    const SizedBox(height: 8),
+                  ],
+                  const SizedBox(height: 12),
+                  // ── Savings ──
+                  _SectionHeader(
+                    title: 'Savings',
+                    amount: currency.format(snapshot.totalSavings),
+                    icon: Icons.savings_outlined,
+                    actionLabel: 'Add savings',
+                    onPressed: _openNewSavingsForm,
+                  ),
+                  const SizedBox(height: 8),
+                  if (savings.isEmpty) ...<Widget>[
+                    const EmptyStateCard(
+                        title: 'No savings pots yet',
+                        message:
+                            'Add a monthly savings amount — emergency fund, holiday, home deposit — to factor it into your budget.'),
+                    const SizedBox(height: 8),
+                  ],
+                  for (final item in savings) ...<Widget>[
+                    _BudgetItemTile(
+                      icon: Icons.savings_outlined,
+                      iconColor: Colors.teal,
+                      name: item.name,
+                      primaryValue: '${currency.format(item.amount)}/mo',
+                      secondaryValue: 'Savings',
+                      onEdit: () => _openEditExpenseForm(item.id),
+                      onDelete: () => _confirmDeleteExpense(item.id, item.name),
+                    ),
+                    const SizedBox(height: 8),
+                  ],
+                  const SizedBox(height: 12),
+                  // ── Mortgage ──
+                  _SectionHeader(
+                    title: 'Mortgage',
+                    amount: currency.format(snapshot.mortgagePayment),
+                    icon: Icons.home_outlined,
+                    actionLabel: 'Add mortgage',
+                    onPressed: () => context.push('/mortgage'),
+                  ),
+                  const SizedBox(height: 8),
+                  if (mortgages.isEmpty)
+                    const EmptyStateCard(
+                        title: 'No mortgage added',
+                        message: 'Add your mortgage to track overpayments.')
+                  else
+                    ...mortgages.map(
+                      (mortgage) => Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: _BudgetItemTile(
+                          icon: Icons.home_work_outlined,
+                          iconColor: colorScheme.primary,
+                          name: mortgage.name,
+                          primaryValue:
+                              '${currency.format(mortgage.totalMonthlyHousingCost)}/mo',
+                          secondaryValue: mortgage.ownershipType ==
+                                  MortgageOwnershipType.sharedOwnership
+                              ? '${mortgage.annualRate.toStringAsFixed(2)}% rate  •  ${currency.format(mortgage.balance)} balance  •  ${mortgage.ownedSharePercent.toStringAsFixed(1)}% owned'
+                              : '${mortgage.annualRate.toStringAsFixed(2)}% rate  •  ${currency.format(mortgage.balance)} balance',
+                          onEdit: () => context.push('/mortgage'),
+                        ),
+                      ),
+                    ),
+                  const SizedBox(height: 12),
                 ],
               ),
             ),
@@ -784,7 +821,6 @@ class _BudgetScreenState extends State<BudgetScreen> {
         SnackBar(content: Text(message)),
       );
   }
-
 }
 
 class _SectionHeader extends StatelessWidget {
@@ -815,7 +851,8 @@ class _SectionHeader extends StatelessWidget {
             children: [
               Text(
                 title,
-                style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
+                style: theme.textTheme.titleSmall
+                    ?.copyWith(fontWeight: FontWeight.w600),
               ),
               if (amount != null)
                 Text(
@@ -832,7 +869,8 @@ class _SectionHeader extends StatelessWidget {
           onPressed: onPressed,
           style: OutlinedButton.styleFrom(
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
             side: BorderSide(color: theme.colorScheme.outlineVariant),
             textStyle: theme.textTheme.labelMedium,
           ),
@@ -896,10 +934,12 @@ class _BudgetItemTile extends StatelessWidget {
                 width: 36,
                 height: 36,
                 decoration: BoxDecoration(
-                  color: (iconColor ?? colorScheme.primary).withValues(alpha: 0.1),
+                  color:
+                      (iconColor ?? colorScheme.primary).withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(10),
                 ),
-                child: Icon(icon, size: 18, color: iconColor ?? colorScheme.primary),
+                child: Icon(icon,
+                    size: 18, color: iconColor ?? colorScheme.primary),
               ),
               const SizedBox(width: 12),
             ],
@@ -910,27 +950,35 @@ class _BudgetItemTile extends StatelessWidget {
                   Row(
                     children: [
                       Expanded(
-                        child: Text(name, style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600)),
+                        child: Text(name,
+                            style: theme.textTheme.titleSmall
+                                ?.copyWith(fontWeight: FontWeight.w600)),
                       ),
-                      Text(primaryValue, style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
+                      Text(primaryValue,
+                          style: theme.textTheme.titleSmall
+                              ?.copyWith(fontWeight: FontWeight.w700)),
                     ],
                   ),
                   if (secondaryValue != null) ...[
                     const SizedBox(height: 3),
-                    Text(secondaryValue!, style: theme.textTheme.bodySmall?.copyWith(color: colorScheme.onSurfaceVariant)),
+                    Text(secondaryValue!,
+                        style: theme.textTheme.bodySmall
+                            ?.copyWith(color: colorScheme.onSurfaceVariant)),
                   ],
                   if (badge != null) ...<Widget>[
                     const SizedBox(height: 6),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 2),
                       decoration: BoxDecoration(
                         color: colorScheme.primary.withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(4),
                       ),
-                      child: Text(badge!, style: theme.textTheme.labelSmall?.copyWith(
-                        color: colorScheme.primary,
-                        fontWeight: FontWeight.w600,
-                      )),
+                      child: Text(badge!,
+                          style: theme.textTheme.labelSmall?.copyWith(
+                            color: colorScheme.primary,
+                            fontWeight: FontWeight.w600,
+                          )),
                     ),
                   ],
                   if (onAddBonus != null) ...[
@@ -1005,7 +1053,8 @@ class _BudgetItemTile extends StatelessWidget {
                                 child: Icon(
                                   Icons.close_rounded,
                                   size: 15,
-                                  color: colorScheme.error.withValues(alpha: 0.9),
+                                  color:
+                                      colorScheme.error.withValues(alpha: 0.9),
                                 ),
                               ),
                             ),
@@ -1024,7 +1073,8 @@ class _BudgetItemTile extends StatelessWidget {
                   onTap: onEdit,
                   child: Padding(
                     padding: const EdgeInsets.all(6),
-                    child: Icon(Icons.edit_outlined, size: 16, color: colorScheme.onSurfaceVariant),
+                    child: Icon(Icons.edit_outlined,
+                        size: 16, color: colorScheme.onSurfaceVariant),
                   ),
                 ),
               if (onDelete != null)
@@ -1033,7 +1083,9 @@ class _BudgetItemTile extends StatelessWidget {
                   onTap: onDelete,
                   child: Padding(
                     padding: const EdgeInsets.all(6),
-                    child: Icon(Icons.delete_outline, size: 16, color: colorScheme.error.withValues(alpha: 0.7)),
+                    child: Icon(Icons.delete_outline,
+                        size: 16,
+                        color: colorScheme.error.withValues(alpha: 0.7)),
                   ),
                 ),
             ],
@@ -1086,7 +1138,9 @@ class _WhyMonthlyCard extends StatelessWidget {
                     ),
                   ),
                   Icon(
-                    expanded ? Icons.expand_less_rounded : Icons.expand_more_rounded,
+                    expanded
+                        ? Icons.expand_less_rounded
+                        : Icons.expand_more_rounded,
                     size: 18,
                     color: cs.onSurfaceVariant,
                   ),
@@ -1104,35 +1158,40 @@ class _WhyMonthlyCard extends StatelessWidget {
                   const SizedBox(height: 12),
                   _BulletPoint(
                     icon: Icons.trending_up_rounded,
-                    text: 'Salary going up in two months? Change it then — your forecast updates automatically.',
+                    text:
+                        'Salary going up in two months? Change it then — your forecast updates automatically.',
                     cs: cs,
                     theme: theme,
                   ),
                   const SizedBox(height: 8),
                   _BulletPoint(
                     icon: Icons.receipt_long_rounded,
-                    text: 'Expenses vary — car service, dentist, annual renewals. Log them in the right month without skewing every other month.',
+                    text:
+                        'Expenses vary — car service, dentist, annual renewals. Log them in the right month without skewing every other month.',
                     cs: cs,
                     theme: theme,
                   ),
                   const SizedBox(height: 8),
                   _BulletPoint(
                     icon: Icons.bolt_rounded,
-                    text: 'Seasonal costs like higher energy bills in winter can be reflected accurately.',
+                    text:
+                        'Seasonal costs like higher energy bills in winter can be reflected accurately.',
                     cs: cs,
                     theme: theme,
                   ),
                   const SizedBox(height: 8),
                   _BulletPoint(
                     icon: Icons.savings_rounded,
-                    text: 'The Planner uses each month\'s real available cash to project exactly when you\'ll be debt-free — not an optimistic annual average.',
+                    text:
+                        'The Planner uses each month\'s real available cash to project exactly when you\'ll be debt-free — not an optimistic annual average.',
                     cs: cs,
                     theme: theme,
                   ),
                   const SizedBox(height: 8),
                   _BulletPoint(
                     icon: Icons.checklist_rounded,
-                    text: 'At month-end, Tracking compares what you planned here against what actually happened.',
+                    text:
+                        'At month-end, Tracking compares what you planned here against what actually happened.',
                     cs: cs,
                     theme: theme,
                   ),

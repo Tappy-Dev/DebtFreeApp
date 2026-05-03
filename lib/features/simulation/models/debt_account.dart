@@ -158,7 +158,7 @@ class DebtAccount {
   }) {
     final start = DateTime(startDate.year, startDate.month);
     final end = DateTime(endDate.year, endDate.month);
-    return (end.year - start.year) * 12 + (end.month - start.month) + 1;
+    return (end.year - start.year) * 12 + (end.month - start.month);
   }
 
   static double calculateAmortizedPayment({

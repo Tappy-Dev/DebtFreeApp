@@ -8,6 +8,7 @@ class BuildMortgageDetail {
   MortgageDetail call({
     required Mortgage mortgage,
     double extraOverpayment = 0,
+    DateTime? overpaymentStartDate,
     DateTime? referenceDate,
   }) {
     final engine = MortgageProjectionEngine();
@@ -20,6 +21,7 @@ class BuildMortgageDetail {
     final withOverpayment = engine.simulate(
       mortgage.copyWith(overpayment: 0),
       extraMonthlyOverpayment: extraOverpayment,
+      overpaymentStartDate: overpaymentStartDate ?? mortgage.overpaymentStartDate,
       startDate: startDate,
     );
 

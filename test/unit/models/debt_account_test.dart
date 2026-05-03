@@ -62,7 +62,7 @@ void main() {
         loanEndDate: DateTime(2029, 3),
       );
 
-      expect(debtAccount.currentMinPayment(), closeTo(365.08, 0.02));
+      expect(debtAccount.currentMinPayment(), closeTo(374.59, 0.02));
     });
   });
 }

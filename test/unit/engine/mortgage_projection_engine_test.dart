@@ -4,15 +4,18 @@ import 'package:debt_free_app/features/simulation/models/salary_sacrifice.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  test('mortgage simulation calculates payoff over term', () {
-    const mortgage = Mortgage(
-      balance: 100000,
-      annualRate: 4.0,
-      monthlyPayment: 500,
-      remainingTermMonths: 300,
-    );
+  // A mortgage started 5 years ago (60 months elapsed) on a 30-year (360-month)
+  // term, leaving ~300 months remaining.
+  final activeMortgage = Mortgage(
+    startDate: DateTime(DateTime.now().year - 5, DateTime.now().month, 1),
+    originalLoanAmount: 125000,
+    mortgageTermMonths: 360,
+    annualRate: 4.0,
+    monthlyPayment: 500,
+  );
 
-    final result = MortgageProjectionEngine().simulate(mortgage);
+  test('mortgage simulation calculates payoff over term', () {
+    final result = MortgageProjectionEngine().simulate(activeMortgage);
 
     expect(result.monthsToPayoff, greaterThan(0));
     expect(result.totalInterestPaid, greaterThan(0));
@@ -21,15 +24,8 @@ void main() {
   });
 
   test('overpayment reduces months and interest', () {
-    const mortgage = Mortgage(
-      balance: 100000,
-      annualRate: 4.0,
-      monthlyPayment: 500,
-      remainingTermMonths: 300,
-    );
-
     final comparison = MortgageProjectionEngine().compare(
-      mortgage,
+      activeMortgage,
       overpaymentAmount: 200,
     );
 
@@ -42,14 +38,16 @@ void main() {
   });
 
   test('zero balance mortgage returns immediately', () {
-    const mortgage = Mortgage(
-      balance: 0,
+    // A mortgage started >30 years ago with a 30-year term is now fully paid off.
+    final expiredMortgage = Mortgage(
+      startDate: DateTime(1990, 1, 1),
+      originalLoanAmount: 100000,
+      mortgageTermMonths: 360,
       annualRate: 4.0,
       monthlyPayment: 500,
-      remainingTermMonths: 300,
     );
 
-    final result = MortgageProjectionEngine().simulate(mortgage);
+    final result = MortgageProjectionEngine().simulate(expiredMortgage);
 
     expect(result.monthsToPayoff, 0);
     expect(result.totalInterestPaid, 0);

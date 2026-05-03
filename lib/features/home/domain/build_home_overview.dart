@@ -70,9 +70,8 @@ class BuildHomeOverview {
     final nextMonthBalance = boosted.monthlyBreakdown.isEmpty
         ? null
         : boosted.monthlyBreakdown.first.totalDebtRemaining;
-    final debtChangeFromPreviousMonth = nextMonthBalance == null
-        ? 0.0
-        : totalDebt - nextMonthBalance;
+    final debtChangeFromPreviousMonth =
+        nextMonthBalance == null ? 0.0 : totalDebt - nextMonthBalance;
     final incomeIncrease = plan.incomeIncrease;
     final expenseReduction = plan.expenseReduction;
     // Include both global and per-debt extra payments for display
@@ -147,7 +146,9 @@ class BuildHomeOverview {
           ? null
           : projectedMortgages.fold<double>(
               0,
-              (sum, m) => sum + (m.balance <= 0 ? 0 : m.balance * m.annualRate / 100 / 12),
+              (sum, m) =>
+                  sum +
+                  (m.balance <= 0 ? 0 : m.balance * m.annualRate / 100 / 12),
             ),
       monthlyForecast: _buildMonthlyForecast(boosted.monthlyBreakdown),
     );
@@ -230,47 +231,59 @@ class BuildHomeOverview {
     DateTime referenceDate,
   ) {
     final now = DateTime.now();
-    final monthOffset =
-        (referenceDate.year - now.year) * 12 + (referenceDate.month - now.month);
+    final monthOffset = (referenceDate.year - now.year) * 12 +
+        (referenceDate.month - now.month);
     if (monthOffset <= 0) return mortgage;
 
-    final result = MortgageProjectionEngine().simulate(
-      mortgage,
-      startDate: DateTime(now.year, now.month),
+    // Move startDate backwards by monthOffset so elapsed time increases
+    // relative to now, matching the projected future state.
+    final projectedStartDate = DateTime(
+      mortgage.startDate.year,
+      mortgage.startDate.month - monthOffset,
+      mortgage.startDate.day,
     );
-    if (result.monthlyBreakdown.isEmpty) return mortgage;
-
-    final index = monthOffset - 1;
-    final capped = index < result.monthlyBreakdown.length
-        ? result.monthlyBreakdown[index]
-        : result.monthlyBreakdown.last;
-    final adjustedTerm =
-      (mortgage.remainingTermMonths - monthOffset).clamp(0, 1200).toInt();
-
-    return mortgage.copyWith(
-      balance: capped.balanceRemaining,
-      remainingTermMonths: adjustedTerm,
-    );
+    return mortgage.copyWith(startDate: projectedStartDate);
   }
 
   Mortgage? _aggregateMortgage(List<Mortgage> mortgages) {
     if (mortgages.isEmpty) return null;
     final totalBalance = mortgages.fold<double>(0, (sum, m) => sum + m.balance);
-    final totalMonthly = mortgages.fold<double>(0, (sum, m) => sum + m.totalMonthlyPayment);
+    final totalMonthly =
+        mortgages.fold<double>(0, (sum, m) => sum + m.totalMonthlyPayment);
+    final totalRent =
+        mortgages.fold<double>(0, (sum, m) => sum + m.monthlyRent);
+    final totalServiceCharge =
+        mortgages.fold<double>(0, (sum, m) => sum + m.monthlyServiceCharge);
+    final totalGroundRent =
+        mortgages.fold<double>(0, (sum, m) => sum + m.monthlyGroundRent);
     final weightedRate = totalBalance <= 0
-      ? 0.0
-        : mortgages.fold<double>(0, (sum, m) => sum + (m.annualRate * m.balance)) /
-        totalBalance.toDouble();
-    final longestTerm = mortgages.fold<int>(0, (maxTerm, m) => math.max(maxTerm, m.remainingTermMonths));
+        ? 0.0
+        : mortgages.fold<double>(
+                0, (sum, m) => sum + (m.annualRate * m.balance)) /
+            totalBalance.toDouble();
+    final longestTerm = mortgages.fold<int>(
+        0, (maxTerm, m) => math.max(maxTerm, m.remainingTermMonths));
+    final hasSharedOwnership = mortgages
+        .any((m) => m.ownershipType == MortgageOwnershipType.sharedOwnership);
 
     return Mortgage(
       id: 'mortgage-aggregate',
-      name: mortgages.length == 1 ? mortgages.first.name : '${mortgages.length} mortgages',
-      balance: totalBalance,
+      name: mortgages.length == 1
+          ? mortgages.first.name
+          : '${mortgages.length} mortgages',
+      startDate: mortgages.first.startDate,
+      originalLoanAmount: mortgages.fold<double>(
+          0, (sum, m) => sum + m.originalLoanAmount),
+      mortgageTermMonths: longestTerm,
       annualRate: weightedRate,
       monthlyPayment: totalMonthly,
-      remainingTermMonths: longestTerm,
       overpayment: 0,
+      ownershipType: hasSharedOwnership
+          ? MortgageOwnershipType.sharedOwnership
+          : MortgageOwnershipType.standard,
+      monthlyRent: totalRent,
+      monthlyServiceCharge: totalServiceCharge,
+      monthlyGroundRent: totalGroundRent,
     );
   }
 
@@ -399,10 +412,12 @@ class BuildHomeOverview {
       parts.add('adds \u00A3${incomeIncrease.toStringAsFixed(2)} income');
     }
     if (expenseReduction > 0) {
-      parts.add('cuts \u00A3${expenseReduction.toStringAsFixed(2)} of expenses');
+      parts
+          .add('cuts \u00A3${expenseReduction.toStringAsFixed(2)} of expenses');
     }
     if (extraPayment > 0) {
-      parts.add('pays \u00A3${extraPayment.toStringAsFixed(2)} extra toward debt');
+      parts.add(
+          'pays \u00A3${extraPayment.toStringAsFixed(2)} extra toward debt');
     }
 
     return _Recommendation(

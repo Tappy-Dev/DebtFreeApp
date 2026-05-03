@@ -1,5 +1,6 @@
 import 'package:debt_free_app/core/data/session_financial_repository.dart';
 import 'package:debt_free_app/core/services/ai_insight_service.dart';
+import 'package:debt_free_app/core/services/ai_usage_service.dart';
 import 'package:debt_free_app/core/services/financial_summary.dart';
 import 'package:debt_free_app/features/budget/domain/build_budget_snapshot.dart';
 import 'package:debt_free_app/features/scenarios/application/scenario_builder_controller.dart';
@@ -46,6 +47,7 @@ class _ScenariosScreenState extends State<ScenariosScreen> {
     super.initState();
     _repository = widget.repository ?? SessionFinancialRepository.instance;
     _controller = ScenarioBuilderController(_repository);
+    AiUsageService.instance.initialize(_repository.database);
     _incomeIncreaseController = TextEditingController(
       text: _formatScenarioAmount(_controller.currentIncomeIncrease()),
     );
@@ -637,6 +639,26 @@ class _AiInsightsCard extends StatelessWidget {
             const Text(
               'Get personalised advice based on your complete financial picture — '
               'debts, mortgage, budget, and current scenario.',
+            ),
+            const SizedBox(height: 8),
+            ListenableBuilder(
+              listenable: AiUsageService.instance,
+              builder: (context, _) {
+                final snap = AiUsageService.instance.snapshot;
+                if (snap.limitReached) return const SizedBox.shrink();
+                final label = snap.isPremium
+                    ? '${snap.requestCount}/${snap.requestLimit} insights used this month'
+                    : '${snap.requestCount}/${snap.requestLimit} trial insights used';
+                final isLow = !snap.isPremium && snap.requestsRemaining <= 1;
+                return Text(
+                  label,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: isLow
+                        ? Theme.of(context).colorScheme.error
+                        : Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+                );
+              },
             ),
             const SizedBox(height: 16),
             if (!hasData)

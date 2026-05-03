@@ -56,6 +56,20 @@ class _DebtSummaryScreenState extends State<DebtSummaryScreen> {
       0,
       (sum, d) => sum + d.currentProjectedBalance(referenceDate),
     );
+    final previousMonthDate = DateTime(referenceDate.year, referenceDate.month - 1);
+    final previousMonthTotalDebt = debts.fold<double>(
+      0,
+      (sum, d) => sum + d.currentProjectedBalance(previousMonthDate),
+    );
+    final debtChangeVsLastMonth = previousMonthTotalDebt - totalDebt;
+    final totalOriginalDebt = debts.fold<double>(
+      0,
+      (sum, d) => sum + d.originalBalance,
+    );
+    final totalRepaid = (totalOriginalDebt - totalDebt).clamp(0.0, double.infinity);
+    final repaidProgress = totalOriginalDebt <= 0
+        ? 0.0
+        : (totalRepaid / totalOriginalDebt).clamp(0.0, 1.0);
 
     // Sort debts by APR descending (avalanche order)
     final sortedDebts = List<DebtAccount>.from(debts)
@@ -93,6 +107,10 @@ class _DebtSummaryScreenState extends State<DebtSummaryScreen> {
               totalInterest: _overview.interestProjection,
               totalMonthlyInterest: totalMonthlyInterest,
               totalMonthlyMinPayment: totalMonthlyMinPayment,
+              debtChangeVsLastMonth: debtChangeVsLastMonth,
+              totalRepaid: totalRepaid,
+              totalOriginalDebt: totalOriginalDebt,
+              repaidProgress: repaidProgress,
               currency: _currency,
             ),
             const SizedBox(height: 16),
@@ -145,6 +163,10 @@ class _OverviewCard extends StatelessWidget {
     required this.totalInterest,
     required this.totalMonthlyInterest,
     required this.totalMonthlyMinPayment,
+    required this.debtChangeVsLastMonth,
+    required this.totalRepaid,
+    required this.totalOriginalDebt,
+    required this.repaidProgress,
     required this.currency,
   });
 
@@ -153,6 +175,10 @@ class _OverviewCard extends StatelessWidget {
   final double totalInterest;
   final double totalMonthlyInterest;
   final double totalMonthlyMinPayment;
+  final double debtChangeVsLastMonth;
+  final double totalRepaid;
+  final double totalOriginalDebt;
+  final double repaidProgress;
   final NumberFormat currency;
 
   @override
@@ -173,57 +199,183 @@ class _OverviewCard extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 16),
-            Row(
-              children: [
-                Expanded(
-                  child: _StatChip(
-                    label: 'Total Debt',
-                    value: currency.format(totalDebt),
-                    icon: Icons.account_balance_outlined,
-                    color: theme.colorScheme.error,
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final compact = constraints.maxWidth < 480;
+
+                final totalDebtPanel = Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.error.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: theme.colorScheme.error.withValues(alpha: 0.25),
+                    ),
                   ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: _StatChip(
-                    label: 'Debt-Free',
-                    value: debtFreeDate,
-                    icon: Icons.flag_outlined,
-                    color: Colors.green,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.account_balance_outlined,
+                            size: 16,
+                            color: theme.colorScheme.error,
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            'Total Debt',
+                            style: theme.textTheme.labelLarge?.copyWith(
+                              color: theme.colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      SizedBox(
+                        width: double.infinity,
+                        child: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          alignment: Alignment.centerLeft,
+                          child: Text(
+                            currency.format(totalDebt),
+                            maxLines: 1,
+                            softWrap: false,
+                            style: theme.textTheme.headlineMedium?.copyWith(
+                              color: theme.colorScheme.error,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: _StatChip(
-                    label: 'Total Interest',
-                    value: currency.format(totalInterest),
-                    icon: Icons.percent_rounded,
-                    color: Colors.orange,
-                  ),
-                ),
-              ],
+                );
+
+                final metricRows = Column(
+                  children: [
+                    _MetricRowCard(
+                      icon: Icons.flag_outlined,
+                      label: 'Debt-Free',
+                      value: debtFreeDate,
+                      valueColor: Colors.green,
+                      infoText:
+                          'The projected date when all your debts will be fully paid off, based on your current balances, minimum payments, and repayment strategy.',
+                    ),
+                    const SizedBox(height: 8),
+                    _MetricRowCard(
+                      icon: Icons.percent_rounded,
+                      label: 'Total Interest',
+                      value: currency.format(totalInterest),
+                      valueColor: Colors.orange,
+                      infoText:
+                          'The total amount of interest you are projected to pay across all your debts from now until they are fully cleared.',
+                    ),
+                    const SizedBox(height: 8),
+                    _MetricRowCard(
+                      icon: Icons.trending_up_rounded,
+                      label: 'Monthly Interest',
+                      value: currency.format(totalMonthlyInterest),
+                      valueColor: theme.colorScheme.error,
+                      infoText:
+                          'How much interest is being added to your debts each month at your current balances and rates. Reducing this quickly saves the most money.',
+                    ),
+                    const SizedBox(height: 8),
+                    _MetricRowCard(
+                      icon: Icons.payments_outlined,
+                      label: 'Min. Payments',
+                      value: currency.format(totalMonthlyMinPayment),
+                      valueColor: theme.colorScheme.primary,
+                      infoText:
+                          'The total of all minimum monthly payments required across your debts. Paying more than this each month will clear your debt faster.',
+                    ),
+                  ],
+                );
+
+                if (compact) {
+                  return Column(
+                    children: [
+                      totalDebtPanel,
+                      const SizedBox(height: 10),
+                      metricRows,
+                    ],
+                  );
+                }
+
+                return Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(flex: 4, child: totalDebtPanel),
+                    const SizedBox(width: 10),
+                    Expanded(flex: 6, child: metricRows),
+                  ],
+                );
+              },
             ),
-            const SizedBox(height: 10),
-            Row(
-              children: [
-                Expanded(
-                  child: _StatChip(
-                    label: 'Monthly Interest',
-                    value: currency.format(totalMonthlyInterest),
-                    icon: Icons.trending_up_rounded,
-                    color: theme.colorScheme.error,
+            const SizedBox(height: 14),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.surfaceContainerLow,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(
+                        debtChangeVsLastMonth >= 0
+                            ? Icons.trending_down_rounded
+                            : Icons.trending_up_rounded,
+                        size: 16,
+                        color: debtChangeVsLastMonth >= 0
+                            ? Colors.green
+                            : theme.colorScheme.error,
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        debtChangeVsLastMonth >= 0
+                            ? 'Down ${currency.format(debtChangeVsLastMonth)} vs last month'
+                            : 'Up ${currency.format(-debtChangeVsLastMonth)} vs last month',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          fontWeight: FontWeight.w600,
+                          color: debtChangeVsLastMonth >= 0
+                              ? Colors.green.shade700
+                              : theme.colorScheme.error,
+                        ),
+                      ),
+                    ],
                   ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: _StatChip(
-                    label: 'Min. Payments',
-                    value: currency.format(totalMonthlyMinPayment),
-                    icon: Icons.payments_outlined,
-                    color: theme.colorScheme.primary,
+                  const SizedBox(height: 10),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'Repaid ${currency.format(totalRepaid)} of ${currency.format(totalOriginalDebt)}',
+                        style: theme.textTheme.labelMedium,
+                      ),
+                      Text(
+                        '${(repaidProgress * 100).toStringAsFixed(1)}%',
+                        style: theme.textTheme.labelMedium?.copyWith(
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
                   ),
-                ),
-              ],
+                  const SizedBox(height: 6),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(999),
+                    child: LinearProgressIndicator(
+                      value: repaidProgress,
+                      minHeight: 8,
+                      backgroundColor: theme.colorScheme.surfaceContainerHighest,
+                      valueColor: AlwaysStoppedAnimation<Color>(Colors.green.shade600),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ],
         ),
@@ -439,41 +591,100 @@ class _DebtOrderTile extends StatelessWidget {
 
 // ── Shared helpers ────────────────────────────────────────────────────────────
 
-class _StatChip extends StatelessWidget {
-  const _StatChip({
+class _MetricRowCard extends StatelessWidget {
+  const _MetricRowCard({
     required this.label,
     required this.value,
     required this.icon,
-    required this.color,
+    required this.valueColor,
+    this.infoText,
   });
 
   final String label;
   final String value;
   final IconData icon;
-  final Color color;
+  final Color valueColor;
+  final String? infoText;
+
+  void _showInfo(BuildContext context) {
+    final theme = Theme.of(context);
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Row(
+          children: [
+            Icon(icon, size: 18, color: valueColor),
+            const SizedBox(width: 8),
+            Text(label),
+          ],
+        ),
+        content: Text(
+          infoText!,
+          style: theme.textTheme.bodyMedium,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Got it'),
+          ),
+        ],
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: color.withValues(alpha: 0.25)),
+        border: Border.all(color: theme.colorScheme.outlineVariant),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Row(
         children: [
-          Icon(icon, size: 16, color: color),
-          const SizedBox(height: 6),
-          Text(value,
-              style: theme.textTheme.bodyMedium
-                  ?.copyWith(fontWeight: FontWeight.bold, color: color)),
-          const SizedBox(height: 2),
-          Text(label,
-              style: theme.textTheme.bodySmall
-                  ?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+          CircleAvatar(
+            radius: 13,
+            backgroundColor: valueColor.withValues(alpha: 0.12),
+            child: Icon(icon, size: 14, color: valueColor),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              label,
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ),
+          const SizedBox(width: 4),
+          Flexible(
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerRight,
+              child: Text(
+                value,
+                maxLines: 1,
+                softWrap: false,
+                style: theme.textTheme.titleMedium?.copyWith(
+                  color: valueColor,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ),
+          if (infoText != null) ...
+            [
+              const SizedBox(width: 2),
+              GestureDetector(
+                onTap: () => _showInfo(context),
+                child: Icon(
+                  Icons.info_outline_rounded,
+                  size: 16,
+                  color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.6),
+                ),
+              ),
+            ],
         ],
       ),
     );

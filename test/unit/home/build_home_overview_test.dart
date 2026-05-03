@@ -8,6 +8,7 @@ import 'package:debt_free_app/features/simulation/models/mortgage.dart';
 import 'package:debt_free_app/features/simulation/models/salary_sacrifice.dart';
 import 'package:debt_free_app/features/simulation/models/scenario_change.dart';
 import 'package:debt_free_app/features/tracking/models/budget_actual.dart';
+import 'package:debt_free_app/features/tracking/models/budget_actual_entry.dart';
 import 'package:debt_free_app/features/tracking/models/budget_period.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -101,94 +102,84 @@ class _HomeScenarioRepository implements FinancialRepository {
 
   @override
   void deleteSalarySacrifice(String id) {}
+
   @override
   List<Expense> getBills() => const [];
+
   @override
   List<Expense> getSubscriptions() => const [];
+
   @override
   String get activeBudgetMonth => '';
+
   @override
   List<String> get availableBudgetMonths => const [];
+
   @override
   List<IncomeSource> getIncomeSourcesForMonth(String monthKey) => getIncomeSources();
+
   @override
   List<Expense> getExpensesForMonth(String monthKey) => getExpenses();
+
   @override
   List<Expense> getBillsForMonth(String monthKey) => const [];
+
   @override
   void saveBill(Expense bill) {}
+
   @override
   void deleteBill(String billId) {}
+
   @override
   Future<List<BudgetPeriod>> getBudgetPeriods() async => const [];
+
   @override
   Future<BudgetPeriod?> getBudgetPeriod(String periodId) async => null;
+
   @override
   Future<void> saveBudgetPeriod(BudgetPeriod period) async {}
+
   @override
   Future<List<BudgetActual>> getBudgetActuals(String periodId) async => const [];
+
   @override
   Future<void> saveBudgetActual(BudgetActual actual) async {}
+
   @override
   Future<void> saveBudgetActuals(List<BudgetActual> actuals) async {}
-}
 
-void main() {
-  test('BuildHomeOverview returns a usable dashboard snapshot', () {
-    final overview = BuildHomeOverview(
-      repository: const DemoFinancialRepository(),
-    )();
+  @override
+  List<Mortgage> getMortgages() {
+    final m = getMortgage();
+    return m == null ? const <Mortgage>[] : <Mortgage>[m];
+  }
 
-    expect(overview.totalDebt, greaterThan(0));
-    expect(overview.interestProjection, greaterThanOrEqualTo(0));
-    expect(overview.interestSaved, greaterThanOrEqualTo(0));
-    expect(overview.debtFreeDateLabel, isNotEmpty);
-    expect(overview.recommendationTitle, isNotEmpty);
-    expect(overview.recommendationMessage, isNotEmpty);
-  });
+  @override
+  void deleteMortgageById(String mortgageId) {
+    final m = getMortgage();
+    if (m != null && m.id == mortgageId) deleteMortgage();
+  }
 
-  test('BuildHomeOverview summarizes full monthly scenario impact', () {
-    final overview = BuildHomeOverview(
-      repository: _HomeScenarioRepository(),
-    )();
+  @override
+  String? get appStartMonth => null;
 
-    expect(overview.incomeIncrease, 75);
-    expect(overview.expenseReduction, 25);
-    expect(overview.extraPayment, 50);
-    expect(overview.monthlyFlexibilityGain, 100);
-    expect(overview.availableCashAfterScenario, 250);
-    expect(overview.planSummaryTitle, 'Active monthly scenario');
-    expect(overview.planSummaryMessage, contains('adds \u00A375.00 income'));
-    expect(overview.recommendationTitle, 'This scenario starts later');
-    expect(
-      overview.scheduleSummary,
-      'starts in 2 months and lasts for 6 months.',
-    );
-    expect(
-      overview.recommendationMessage,
-      contains('These changes begin in 2 months.'),
-    );
-    expect(
-      overview.planSummaryMessage,
-      contains('cuts \u00A325.00 of expenses'),
-    );
-    expect(
-      overview.planSummaryMessage,
-      contains('pays \u00A350.00 extra toward debt'),
-    );
-  });
+  @override
+  Future<void> setAppStartMonth(String monthKey) async {}
 
-  test('BuildHomeOverview warns when saved schedules are inconsistent', () {
-    final overview = BuildHomeOverview(
-      repository: _InconsistentHomeScenarioRepository(),
-    )();
+  @override
+  Future<void> deleteBudgetActual(String actualId) async {}
 
-    expect(overview.scheduleWarningMessage, isNotNull);
-    expect(
-      overview.scheduleWarningMessage,
-      contains('different schedules'),
-    );
-  });
+  @override
+  Future<void> deleteSeededBudgetActuals(String periodId) async {}
+
+  @override
+  Future<List<BudgetActualEntry>> getBudgetActualEntries(String periodId) async => const [];
+
+  @override
+  Future<void> saveBudgetActualEntry(BudgetActualEntry entry) async {}
+
+  @override
+  Future<void> deleteBudgetActualEntry(String entryId) async {}
 }
 
 class _InconsistentHomeScenarioRepository implements FinancialRepository {
@@ -275,34 +266,140 @@ class _InconsistentHomeScenarioRepository implements FinancialRepository {
 
   @override
   void deleteSalarySacrifice(String id) {}
+
   @override
   List<Expense> getBills() => const [];
+
   @override
   List<Expense> getSubscriptions() => const [];
+
   @override
   String get activeBudgetMonth => '';
+
   @override
   List<String> get availableBudgetMonths => const [];
+
   @override
   List<IncomeSource> getIncomeSourcesForMonth(String monthKey) => getIncomeSources();
+
   @override
   List<Expense> getExpensesForMonth(String monthKey) => getExpenses();
+
   @override
   List<Expense> getBillsForMonth(String monthKey) => const [];
+
   @override
   void saveBill(Expense bill) {}
+
   @override
   void deleteBill(String billId) {}
+
   @override
   Future<List<BudgetPeriod>> getBudgetPeriods() async => const [];
+
   @override
   Future<BudgetPeriod?> getBudgetPeriod(String periodId) async => null;
+
   @override
   Future<void> saveBudgetPeriod(BudgetPeriod period) async {}
+
   @override
   Future<List<BudgetActual>> getBudgetActuals(String periodId) async => const [];
+
   @override
   Future<void> saveBudgetActual(BudgetActual actual) async {}
+
   @override
   Future<void> saveBudgetActuals(List<BudgetActual> actuals) async {}
+
+  @override
+  List<Mortgage> getMortgages() {
+    final m = getMortgage();
+    return m == null ? const <Mortgage>[] : <Mortgage>[m];
+  }
+
+  @override
+  void deleteMortgageById(String mortgageId) {
+    final m = getMortgage();
+    if (m != null && m.id == mortgageId) deleteMortgage();
+  }
+
+  @override
+  String? get appStartMonth => null;
+
+  @override
+  Future<void> setAppStartMonth(String monthKey) async {}
+
+  @override
+  Future<void> deleteBudgetActual(String actualId) async {}
+
+  @override
+  Future<void> deleteSeededBudgetActuals(String periodId) async {}
+
+  @override
+  Future<List<BudgetActualEntry>> getBudgetActualEntries(String periodId) async => const [];
+
+  @override
+  Future<void> saveBudgetActualEntry(BudgetActualEntry entry) async {}
+
+  @override
+  Future<void> deleteBudgetActualEntry(String entryId) async {}
+}
+
+void main() {
+  test('BuildHomeOverview returns a usable dashboard snapshot', () {
+    final overview = BuildHomeOverview(
+      repository: const DemoFinancialRepository(),
+    )();
+
+    expect(overview.totalDebt, greaterThan(0));
+    expect(overview.interestProjection, greaterThanOrEqualTo(0));
+    expect(overview.interestSaved, greaterThanOrEqualTo(0));
+    expect(overview.debtFreeDateLabel, isNotEmpty);
+    expect(overview.recommendationTitle, isNotEmpty);
+    expect(overview.recommendationMessage, isNotEmpty);
+  });
+
+  test('BuildHomeOverview summarizes full monthly scenario impact', () {
+    final overview = BuildHomeOverview(
+      repository: _HomeScenarioRepository(),
+    )();
+
+    expect(overview.incomeIncrease, 75);
+    expect(overview.expenseReduction, 25);
+    expect(overview.extraPayment, 50);
+    expect(overview.monthlyFlexibilityGain, 100);
+    expect(overview.availableCashAfterScenario, 250);
+    expect(overview.planSummaryTitle, 'Active monthly scenario');
+    expect(overview.planSummaryMessage, contains('adds £75.00 income'));
+    expect(overview.recommendationTitle, 'This scenario starts later');
+    expect(
+      overview.scheduleSummary,
+      'starts in 2 months and lasts for 6 months.',
+    );
+    expect(
+      overview.recommendationMessage,
+      contains('These changes begin in 2 months.'),
+    );
+    expect(
+      overview.planSummaryMessage,
+      contains('cuts £25.00 of expenses'),
+    );
+    expect(
+      overview.planSummaryMessage,
+      contains('pays £50.00 extra toward debt'),
+    );
+  });
+
+  test('BuildHomeOverview warns when saved schedules are inconsistent', () {
+    final overview = BuildHomeOverview(
+      repository: _InconsistentHomeScenarioRepository(),
+    )();
+
+    expect(overview.scheduleWarningMessage, isNotNull);
+    expect(
+      overview.scheduleWarningMessage,
+      contains('different schedules'),
+    );
+  });
 }

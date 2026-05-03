@@ -39,6 +39,7 @@ class MortgageProjectionEngine {
   MortgageProjectionResult simulate(
     Mortgage mortgage, {
     double extraMonthlyOverpayment = 0,
+    DateTime? overpaymentStartDate,
     DateTime? startDate,
     int? maxMonths,
   }) {
@@ -61,9 +62,18 @@ class MortgageProjectionEngine {
         <MortgageProjectionMonth>[];
     final monthlyRate = mortgage.annualRate / 100 / 12;
     final totalOverpayment = mortgage.overpayment + extraMonthlyOverpayment;
+    // Resolve the effective overpayment start date (model field wins if set,
+    // otherwise caller-supplied param, otherwise no restriction).
+    final effectiveOverpaymentStart =
+        mortgage.overpaymentStartDate ?? overpaymentStartDate;
 
     for (int i = 0; i < effectiveMax; i++) {
       if (balance <= 0) break;
+
+      final month = DateTime(
+        projectionStart.year,
+        projectionStart.month + i,
+      );
 
       final interest = balance * monthlyRate;
       totalInterest += interest;
@@ -77,15 +87,15 @@ class MortgageProjectionEngine {
       balance -= principalPaid;
 
       double overpaymentApplied = 0;
-      if (totalOverpayment > 0 && balance > 0) {
+      final overpaymentActive = effectiveOverpaymentStart == null ||
+          !month.isBefore(DateTime(
+            effectiveOverpaymentStart.year,
+            effectiveOverpaymentStart.month,
+          ));
+      if (totalOverpayment > 0 && balance > 0 && overpaymentActive) {
         overpaymentApplied = math.min(totalOverpayment, balance).toDouble();
         balance -= overpaymentApplied;
       }
-
-      final month = DateTime(
-        projectionStart.year,
-        projectionStart.month + i,
-      );
 
       breakdown.add(MortgageProjectionMonth(
         monthIndex: i,

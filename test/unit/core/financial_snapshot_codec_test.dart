@@ -40,7 +40,7 @@ void main() {
     expect(decoded.debts, hasLength(1));
     expect(decoded.debts.first.name, 'Card');
     expect(decoded.debts.first.minimumPayment, 60);
-    expect(decoded.income.first.amount, 3200);
+    expect(decoded.income.first.annualGross, 38400);
     expect(decoded.expenses.first.name, 'Rent');
     expect(decoded.scenarioChanges.first.amount, 200);
   });

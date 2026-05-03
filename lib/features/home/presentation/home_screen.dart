@@ -1,8 +1,10 @@
 import 'package:debt_free_app/core/data/session_financial_repository.dart';
+import 'package:debt_free_app/core/services/subscription_service.dart';
 import 'package:debt_free_app/core/utils/financial_month.dart';
 import 'package:debt_free_app/features/budget/domain/build_budget_snapshot.dart';
 import 'package:debt_free_app/features/home/domain/build_home_overview.dart';
 import 'package:debt_free_app/features/simulation/models/scenario_change.dart';
+import 'package:debt_free_app/features/subscription/presentation/paywall_screen.dart';
 import 'package:debt_free_app/features/tracking/domain/build_monthly_budget_summary.dart';
 import 'package:debt_free_app/features/tracking/domain/find_overdue_open_budget_period.dart';
 import 'package:debt_free_app/features/tracking/models/budget_period.dart';
@@ -109,6 +111,17 @@ class _HomeScreenState extends State<HomeScreen> {
                     fontWeight: FontWeight.bold,
                   )),
           const SizedBox(height: 16),
+          if (SubscriptionService.instance.isTrialActive) ...<Widget>[
+            _TrialUpsellBanner(
+              daysRemaining: SubscriptionService.instance.trialDaysRemaining,
+              onSubscribe: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => const PaywallScreen(),
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+          ],
           if (!allSetupDone) ...<Widget>[
             _SetupGuideCard(
               hasIncome: hasIncome,
@@ -133,6 +146,9 @@ class _HomeScreenState extends State<HomeScreen> {
             if (_trackingSummary != null && !_trackingSummary!.period.isClosed) ...<Widget>[
               Builder(builder: (context) {
                 final s = _trackingSummary!;
+                final hasAnyExpenseLogged =
+                    s.expenseActuals.any((a) => a.actual > 0);
+                if (hasAnyExpenseLogged) return const SizedBox.shrink();
                 final repo = _repository;
                 final currentKey = repo.currentMonthKeyWithStartDay();
                 final summaryKey = '${s.period.year}-${s.period.month.toString().padLeft(2, '0')}';
@@ -189,6 +205,74 @@ class _HomeScreenState extends State<HomeScreen> {
             const SizedBox(height: 16),
           ],
         ],
+      ),
+    );
+  }
+}
+
+class _TrialUpsellBanner extends StatelessWidget {
+  const _TrialUpsellBanner({
+    required this.daysRemaining,
+    required this.onSubscribe,
+  });
+
+  final int daysRemaining;
+  final VoidCallback onSubscribe;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Card(
+      clipBehavior: Clip.antiAlias,
+      child: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [
+              theme.colorScheme.primaryContainer.withValues(alpha: 0.5),
+              theme.colorScheme.surface,
+            ],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            children: [
+              Icon(Icons.workspace_premium_rounded,
+                  size: 28, color: theme.colorScheme.primary),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Free trial — $daysRemaining day${daysRemaining == 1 ? '' : 's'} left',
+                      style: theme.textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Subscribe to keep full access and unlock AI features.',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              FilledButton(
+                onPressed: onSubscribe,
+                style: FilledButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                ),
+                child: const Text('Subscribe'),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -319,59 +403,92 @@ class _DebtSnapshotCard extends StatelessWidget {
                       size: 14, color: theme.colorScheme.onSurfaceVariant),
                 ],
               ),
-            const SizedBox(height: 16),
-            Row(
-              children: [
-                Expanded(
-                  child: _DebtStatChip(
-                    label: 'Total Debt',
-                    value: currency.format(totalDebt),
-                    icon: Icons.account_balance_outlined,
-                    color: theme.colorScheme.error,
+              const SizedBox(height: 16),
+
+              // ── Total Debt headline panel ──
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.error.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: theme.colorScheme.error.withValues(alpha: 0.25),
                   ),
                 ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: _DebtStatChip(
-                    label: 'Debt-Free',
-                    value: debtFreeDate,
-                    icon: Icons.flag_outlined,
-                    color: Colors.green,
-                  ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(Icons.account_balance_outlined,
+                            size: 16, color: theme.colorScheme.error),
+                        const SizedBox(width: 6),
+                        Text('Total Debt',
+                            style: theme.textTheme.labelLarge?.copyWith(
+                              color: theme.colorScheme.onSurfaceVariant,
+                            )),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    SizedBox(
+                      width: double.infinity,
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          currency.format(totalDebt),
+                          maxLines: 1,
+                          softWrap: false,
+                          style: theme.textTheme.headlineMedium?.copyWith(
+                            color: theme.colorScheme.error,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: _DebtStatChip(
-                    label: 'Total Interest',
-                    value: currency.format(interestProjection),
-                    icon: Icons.percent_rounded,
-                    color: Colors.orange,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Icon(
-                  hasReduction
-                      ? Icons.arrow_downward_rounded
-                      : delta < 0
-                          ? Icons.arrow_upward_rounded
-                          : Icons.remove_rounded,
-                  size: 16,
-                  color: deltaColor,
-                ),
-                const SizedBox(width: 6),
-                Text(
-                  deltaLabel,
-                  style: theme.textTheme.bodySmall?.copyWith(
+              ),
+              const SizedBox(height: 10),
+
+              // ── Metric rows ──
+              _MortgageSummaryMetricRowCard(
+                icon: Icons.flag_outlined,
+                label: 'Debt-Free',
+                value: debtFreeDate,
+                valueColor: Colors.green,
+              ),
+              const SizedBox(height: 8),
+              _MortgageSummaryMetricRowCard(
+                icon: Icons.percent_rounded,
+                label: 'Total Interest',
+                value: currency.format(interestProjection),
+                valueColor: Colors.orange,
+              ),
+              const SizedBox(height: 12),
+
+              // ── Delta row ──
+              Row(
+                children: [
+                  Icon(
+                    hasReduction
+                        ? Icons.arrow_downward_rounded
+                        : delta < 0
+                            ? Icons.arrow_upward_rounded
+                            : Icons.remove_rounded,
+                    size: 16,
                     color: deltaColor,
-                    fontWeight: FontWeight.w600,
                   ),
-                ),
-              ],
-            ),
+                  const SizedBox(width: 6),
+                  Text(
+                    deltaLabel,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: deltaColor,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
           ],
         ),
       ),
@@ -817,86 +934,174 @@ class _MortgageSummaryCard extends StatelessWidget {
               ),
               const SizedBox(height: 16),
 
-              // ── Balance highlight ──
-              Container(
-                width: double.infinity,
-                padding:
-                    const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
-                decoration: BoxDecoration(
-                  color: theme.colorScheme.primaryContainer,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Outstanding Balance',
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: theme.colorScheme.onPrimaryContainer,
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  final compact = constraints.maxWidth < 480;
+
+                  final balancePanel = Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.primary.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: theme.colorScheme.primary.withValues(alpha: 0.25),
                       ),
                     ),
-                    const SizedBox(height: 4),
-                    Text(
-                      currency.format(balance),
-                      style: theme.textTheme.headlineSmall?.copyWith(
-                        fontWeight: FontWeight.bold,
-                        color: theme.colorScheme.onPrimaryContainer,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Icon(
+                              Icons.account_balance_outlined,
+                              size: 16,
+                              color: theme.colorScheme.primary,
+                            ),
+                            const SizedBox(width: 6),
+                            Text(
+                              'Outstanding Balance',
+                              style: theme.textTheme.labelLarge?.copyWith(
+                                color: theme.colorScheme.onSurfaceVariant,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        SizedBox(
+                          width: double.infinity,
+                          child: FittedBox(
+                            fit: BoxFit.scaleDown,
+                            alignment: Alignment.centerLeft,
+                            child: Text(
+                              currency.format(balance),
+                              maxLines: 1,
+                              softWrap: false,
+                              style: theme.textTheme.headlineMedium?.copyWith(
+                                color: theme.colorScheme.primary,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+
+                  final metricRows = Column(
+                    children: [
+                      _MortgageSummaryMetricRowCard(
+                        icon: Icons.flag_outlined,
+                        label: 'Payoff',
+                        value: payoffLabel,
+                        valueColor: Colors.green,
                       ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 12),
+                      const SizedBox(height: 8),
+                      _MortgageSummaryMetricRowCard(
+                        icon: Icons.percent_rounded,
+                        label: mortgageCount > 1 ? 'Avg Rate' : 'Rate',
+                        value: '${annualRate.toStringAsFixed(2)}%',
+                        valueColor: Colors.orange,
+                      ),
+                      const SizedBox(height: 8),
+                      _MortgageSummaryMetricRowCard(
+                        icon: Icons.payments_outlined,
+                        label: 'Monthly Payment',
+                        value: currency.format(monthlyPayment),
+                        valueColor: theme.colorScheme.primary,
+                      ),
+                      const SizedBox(height: 8),
+                      _MortgageSummaryMetricRowCard(
+                        icon: Icons.trending_up_rounded,
+                        label: 'Total Interest',
+                        value: currency.format(totalInterest),
+                        valueColor: theme.colorScheme.error,
+                      ),
+                    ],
+                  );
 
-              // ── Stat chips row 1 ──
-              Row(
-                children: [
-                  Expanded(
-                    child: _StatChip(
-                      label: 'Monthly',
-                      value: currency.format(monthlyPayment),
-                      icon: Icons.payments_outlined,
-                      color: theme.colorScheme.primary,
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: _StatChip(
-                      label: mortgageCount > 1 ? 'Avg Rate' : 'Rate',
-                      value: '${annualRate.toStringAsFixed(2)}%',
-                      icon: Icons.percent_rounded,
-                      color: Colors.orange,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 10),
+                  if (compact) {
+                    return Column(
+                      children: [
+                        balancePanel,
+                        const SizedBox(height: 10),
+                        metricRows,
+                      ],
+                    );
+                  }
 
-              // ── Stat chips row 2 ──
-              Row(
-                children: [
-                  Expanded(
-                    child: _StatChip(
-                      label: 'Payoff',
-                      value: payoffLabel,
-                      icon: Icons.flag_outlined,
-                      color: Colors.green,
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: _StatChip(
-                      label: 'Total Interest',
-                      value: currency.format(totalInterest),
-                      icon: Icons.trending_up_rounded,
-                      color: theme.colorScheme.error,
-                    ),
-                  ),
-                ],
+                  return Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(flex: 4, child: balancePanel),
+                      const SizedBox(width: 10),
+                      Expanded(flex: 6, child: metricRows),
+                    ],
+                  );
+                },
               ),
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _MortgageSummaryMetricRowCard extends StatelessWidget {
+  const _MortgageSummaryMetricRowCard({
+    required this.label,
+    required this.value,
+    required this.icon,
+    required this.valueColor,
+  });
+
+  final String label;
+  final String value;
+  final IconData icon;
+  final Color valueColor;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: theme.colorScheme.outlineVariant),
+      ),
+      child: Row(
+        children: [
+          CircleAvatar(
+            radius: 13,
+            backgroundColor: valueColor.withValues(alpha: 0.12),
+            child: Icon(icon, size: 14, color: valueColor),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              label,
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Flexible(
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerRight,
+              child: Text(
+                value,
+                maxLines: 1,
+                softWrap: false,
+                style: theme.textTheme.titleMedium?.copyWith(
+                  color: valueColor,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

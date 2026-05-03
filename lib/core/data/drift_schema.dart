@@ -191,13 +191,22 @@ class DriftSchema {
     CREATE TABLE IF NOT EXISTS mortgage (
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL,
-      balance REAL NOT NULL,
+      balance REAL NOT NULL DEFAULT 0,
+      start_date TEXT NOT NULL,
+      original_loan_amount REAL NOT NULL,
+      remaining_term_months INTEGER NOT NULL DEFAULT 0,
+      mortgage_term_months INTEGER NOT NULL,
       annual_rate REAL NOT NULL,
       monthly_payment REAL NOT NULL,
-      remaining_term_months INTEGER NOT NULL,
       overpayment REAL NOT NULL DEFAULT 0,
       payment_day INTEGER NOT NULL DEFAULT 1,
-      deal_end_date INTEGER
+      deal_end_date INTEGER,
+      ownership_type TEXT NOT NULL DEFAULT 'standard',
+      repayment_type TEXT NOT NULL DEFAULT 'repayment',
+      owned_share_percent REAL NOT NULL DEFAULT 100,
+      monthly_rent REAL NOT NULL DEFAULT 0,
+      monthly_service_charge REAL NOT NULL DEFAULT 0,
+      monthly_ground_rent REAL NOT NULL DEFAULT 0
     )
   ''';
 
@@ -207,6 +216,46 @@ class DriftSchema {
 
   static const String addMortgageDealEndDateColumn = '''
     ALTER TABLE mortgage ADD COLUMN deal_end_date INTEGER
+  ''';
+
+  static const String addMortgageOwnershipTypeColumn = '''
+    ALTER TABLE mortgage ADD COLUMN ownership_type TEXT NOT NULL DEFAULT 'standard'
+  ''';
+
+  static const String addMortgageRepaymentTypeColumn = '''
+    ALTER TABLE mortgage ADD COLUMN repayment_type TEXT NOT NULL DEFAULT 'repayment'
+  ''';
+
+  static const String addMortgageOwnedSharePercentColumn = '''
+    ALTER TABLE mortgage ADD COLUMN owned_share_percent REAL NOT NULL DEFAULT 100
+  ''';
+
+  static const String addMortgageMonthlyRentColumn = '''
+    ALTER TABLE mortgage ADD COLUMN monthly_rent REAL NOT NULL DEFAULT 0
+  ''';
+
+  static const String addMortgageMonthlyServiceChargeColumn = '''
+    ALTER TABLE mortgage ADD COLUMN monthly_service_charge REAL NOT NULL DEFAULT 0
+  ''';
+
+  static const String addMortgageMonthlyGroundRentColumn = '''
+    ALTER TABLE mortgage ADD COLUMN monthly_ground_rent REAL NOT NULL DEFAULT 0
+  ''';
+
+  static const String addMortgageStartDateColumn = '''
+    ALTER TABLE mortgage ADD COLUMN start_date TEXT NOT NULL DEFAULT '2024-01-01'
+  ''';
+
+  static const String addMortgageOriginalLoanAmountColumn = '''
+    ALTER TABLE mortgage ADD COLUMN original_loan_amount REAL NOT NULL DEFAULT 0
+  ''';
+
+  static const String addMortgageTermMonthsColumn = '''
+    ALTER TABLE mortgage ADD COLUMN mortgage_term_months INTEGER NOT NULL DEFAULT 360
+  ''';
+
+  static const String addMortgageOverpaymentStartDateColumn = '''
+    ALTER TABLE mortgage ADD COLUMN overpayment_start_date TEXT
   ''';
 
   static const String salarySacrificesTable = 'salary_sacrifices';

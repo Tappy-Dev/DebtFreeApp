@@ -8,7 +8,6 @@ import 'package:debt_free_app/features/simulation/engine/mortgage_projection_eng
 import 'package:debt_free_app/features/simulation/models/mortgage.dart';
 import 'package:debt_free_app/shared/widgets/money_input_slider.dart';
 import 'package:debt_free_app/shared/widgets/preview_month_badge.dart';
-import 'package:debt_free_app/shared/widgets/timeline_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
@@ -23,8 +22,11 @@ class _MortgageScreenState extends State<MortgageScreen> {
   final _repository = SessionFinancialRepository.instance;
   String? _selectedMortgageId;
   double _extraOverpayment = 0;
+  double _savedExtraOverpayment = 0;
+  late DateTime _overpaymentApplyFrom;
   MortgageDetail? _detail;
   final _currencyFormat = NumberFormat.currency(symbol: '£', decimalDigits: 2);
+  final _monthFormat = DateFormat('MMMM yyyy');
 
   @override
   void initState() {
@@ -32,7 +34,11 @@ class _MortgageScreenState extends State<MortgageScreen> {
     _repository.addListener(_onRepositoryChange);
     final mortgages = _repository.getMortgages();
     _selectedMortgageId = mortgages.isEmpty ? null : mortgages.first.id;
+    final now = _repository.effectiveNow;
+    _overpaymentApplyFrom = _selectedMortgage?.overpaymentStartDate ??
+        DateTime(now.year, now.month);
     _extraOverpayment = _selectedMortgage?.overpayment ?? 0;
+    _savedExtraOverpayment = _extraOverpayment;
     _recalculate();
   }
 
@@ -64,20 +70,29 @@ class _MortgageScreenState extends State<MortgageScreen> {
 
   void _syncSelectedMortgage() {
     final mortgages = _repository.getMortgages();
+    final now = _repository.effectiveNow;
     if (mortgages.isEmpty) {
       _selectedMortgageId = null;
       _extraOverpayment = 0;
+      _savedExtraOverpayment = 0;
+      _overpaymentApplyFrom = DateTime(now.year, now.month);
       return;
     }
     final stillExists = mortgages.any((m) => m.id == _selectedMortgageId);
     if (!stillExists) {
       _selectedMortgageId = mortgages.first.id;
       _extraOverpayment = mortgages.first.overpayment;
+      _savedExtraOverpayment = _extraOverpayment;
+      _overpaymentApplyFrom = mortgages.first.overpaymentStartDate ??
+          DateTime(now.year, now.month);
       return;
     }
     final selected = _selectedMortgage;
     if (selected != null) {
       _extraOverpayment = selected.overpayment;
+      _savedExtraOverpayment = _extraOverpayment;
+      _overpaymentApplyFrom = selected.overpaymentStartDate ??
+          DateTime(now.year, now.month);
     }
   }
 
@@ -95,6 +110,7 @@ class _MortgageScreenState extends State<MortgageScreen> {
     _detail = BuildMortgageDetail().call(
       mortgage: displayedMortgage,
       extraOverpayment: _extraOverpayment,
+      overpaymentStartDate: _overpaymentApplyFrom,
       referenceDate: referenceDate,
     );
   }
@@ -110,37 +126,41 @@ class _MortgageScreenState extends State<MortgageScreen> {
       return mortgage;
     }
 
-    final result = MortgageProjectionEngine().simulate(
-      mortgage,
-      startDate: DateTime(now.year, now.month),
+    // Move startDate backwards by monthOffset so elapsed time increases and
+    // the projected balance/term reflect a future date.
+    final projectedStartDate = DateTime(
+      mortgage.startDate.year,
+      mortgage.startDate.month - monthOffset,
+      mortgage.startDate.day,
     );
-    if (result.monthlyBreakdown.isEmpty) {
-      return mortgage;
-    }
-
-    final index = math.min(monthOffset - 1, result.monthlyBreakdown.length - 1);
-    final month = result.monthlyBreakdown[index];
-    final remainingTerm =
-        math.max(0, mortgage.remainingTermMonths - monthOffset);
-
-    return mortgage.copyWith(
-      balance: month.balanceRemaining,
-      remainingTermMonths: remainingTerm,
-    );
+    return mortgage.copyWith(startDate: projectedStartDate);
   }
 
   void _applyOverpayment() {
     final mortgage = _selectedMortgage;
     if (mortgage == null) return;
-    _repository.saveMortgage(mortgage.copyWith(overpayment: _extraOverpayment));
+    final now = _repository.effectiveNow;
+    final applyFrom = _extraOverpayment > 0
+        ? _overpaymentApplyFrom
+        : null;
+    _repository.saveMortgage(mortgage.copyWith(
+      overpayment: _extraOverpayment,
+      overpaymentStartDate: applyFrom,
+    ));
+    setState(() {
+      _savedExtraOverpayment = _extraOverpayment;
+      if (_extraOverpayment == 0) {
+        _overpaymentApplyFrom = DateTime(now.year, now.month);
+      }
+    });
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
           _extraOverpayment > 0
-              ? 'Monthly overpayment of £${_extraOverpayment.toStringAsFixed(0)} applied'
+              ? 'Overpayment of £${_extraOverpayment.toStringAsFixed(0)}/mo applied from ${_monthFormat.format(_overpaymentApplyFrom)}'
               : 'Overpayment cleared',
         ),
-        duration: const Duration(seconds: 2),
+        duration: const Duration(seconds: 3),
       ),
     );
   }
@@ -236,9 +256,15 @@ class _MortgageScreenState extends State<MortgageScreen> {
                 .toList(growable: false),
             onChanged: (value) {
               if (value == null) return;
+              final now = _repository.effectiveNow;
+              final m = _repository.getMortgages()
+                  .firstWhere((m) => m.id == value);
               setState(() {
                 _selectedMortgageId = value;
-                _extraOverpayment = _selectedMortgage?.overpayment ?? 0;
+                _extraOverpayment = m.overpayment;
+                _savedExtraOverpayment = _extraOverpayment;
+                _overpaymentApplyFrom = m.overpaymentStartDate ??
+                    DateTime(now.year, now.month);
                 _recalculate();
               });
             },
@@ -305,76 +331,155 @@ class _MortgageScreenState extends State<MortgageScreen> {
                     ],
                   ),
                 ),
+                if (selectedMortgage.ownershipType ==
+                    MortgageOwnershipType.sharedOwnership) ...[
+                  const SizedBox(height: 10),
+                  _buildSharedOwnershipBreakdown(context, selectedMortgage),
+                ],
                 const SizedBox(height: 12),
 
-                // ── Stat chips row 1 ──
-                Row(
-                  children: [
-                    Expanded(
-                      child: _MortgageStatChip(
-                        label: 'Interest Rate',
-                        value: '${detail.annualRate.toStringAsFixed(2)}%',
-                        icon: Icons.percent_rounded,
-                        color: Colors.orange,
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: _MortgageStatChip(
-                        label: 'Monthly Payment',
-                        value: _currencyFormat.format(
-                          detail.monthlyPayment +
-                              (selectedMortgage.overpayment),
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    final compact = constraints.maxWidth < 480;
+
+                    final balancePanel = Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: theme.colorScheme.primary.withValues(alpha: 0.08),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: theme.colorScheme.primary.withValues(alpha: 0.25),
                         ),
-                        icon: Icons.payments_outlined,
-                        color: theme.colorScheme.primary,
                       ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 10),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Icon(
+                                Icons.home_outlined,
+                                size: 16,
+                                color: theme.colorScheme.primary,
+                              ),
+                              const SizedBox(width: 6),
+                              Text(
+                                'Outstanding Balance',
+                                style: theme.textTheme.labelLarge?.copyWith(
+                                  color: theme.colorScheme.onSurfaceVariant,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          SizedBox(
+                            width: double.infinity,
+                            child: FittedBox(
+                              fit: BoxFit.scaleDown,
+                              alignment: Alignment.centerLeft,
+                              child: Text(
+                                _currencyFormat.format(detail.balance),
+                                maxLines: 1,
+                                softWrap: false,
+                                style: theme.textTheme.headlineMedium?.copyWith(
+                                  color: theme.colorScheme.primary,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
 
-                // ── Stat chips row 2 ──
-                Row(
-                  children: [
-                    Expanded(
-                      child: _MortgageStatChip(
-                        label: 'Remaining Term',
-                        value: _formatTerm(detail.remainingTermMonths),
-                        icon: Icons.timelapse_rounded,
-                        color: theme.colorScheme.secondary,
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: _MortgageStatChip(
-                        label: 'Payoff Date',
-                        value: detail.payoffDateLabel,
-                        icon: Icons.flag_outlined,
-                        color: Colors.green,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 10),
+                    final metricRows = Column(
+                      children: [
+                        _MortgageMetricRowCard(
+                          icon: Icons.percent_rounded,
+                          label: 'Interest Rate',
+                          value: '${detail.annualRate.toStringAsFixed(2)}%',
+                          valueColor: Colors.orange,
+                        ),
+                        const SizedBox(height: 8),
+                        _MortgageMetricRowCard(
+                          icon: Icons.payments_outlined,
+                          label: 'Monthly Payment',
+                          value: _currencyFormat
+                              .format(selectedMortgage.totalMonthlyPayment),
+                          valueColor: theme.colorScheme.primary,
+                        ),
+                        const SizedBox(height: 8),
+                        _MortgageMetricRowCard(
+                          icon: Icons.timelapse_rounded,
+                          label: 'Remaining Term',
+                          value: _formatTerm(detail.remainingTermMonths),
+                          valueColor: theme.colorScheme.secondary,
+                        ),
+                        const SizedBox(height: 8),
+                        _MortgageMetricRowCard(
+                          icon: Icons.flag_outlined,
+                          label: 'Payoff Date',
+                          value: detail.payoffDateLabel,
+                          valueColor: Colors.green,
+                        ),
+                        if (selectedMortgage.ownershipType ==
+                            MortgageOwnershipType.sharedOwnership) ...[
+                          const SizedBox(height: 8),
+                          _MortgageMetricRowCard(
+                            icon: Icons.pie_chart_outline_rounded,
+                            label: 'Owned Share',
+                            value:
+                                '${selectedMortgage.ownedSharePercent.toStringAsFixed(1)}%',
+                            valueColor: theme.colorScheme.tertiary,
+                          ),
+                          const SizedBox(height: 8),
+                          _MortgageMetricRowCard(
+                            icon: Icons.account_balance_wallet_outlined,
+                            label: 'Housing Total',
+                            value: _currencyFormat
+                                .format(selectedMortgage.totalMonthlyHousingCost),
+                            valueColor: Colors.indigo,
+                          ),
+                        ],
+                        const SizedBox(height: 8),
+                        _MortgageMetricRowCard(
+                          icon: Icons.trending_up_rounded,
+                          label: 'Total Interest',
+                          value: _currencyFormat.format(detail.totalInterest),
+                          valueColor: theme.colorScheme.error,
+                        ),
+                        if (selectedMortgage.dealEndDate != null) ...[
+                          const SizedBox(height: 8),
+                          _MortgageMetricRowCard(
+                            icon: Icons.event_outlined,
+                            label: 'Deal Ends',
+                            value: DateFormat('MMM yyyy')
+                                .format(selectedMortgage.dealEndDate!),
+                            valueColor: _dealEndColor(context, selectedMortgage),
+                          ),
+                        ],
+                      ],
+                    );
 
-                // ── Total interest chip (full width) ──
-                _MortgageStatChip(
-                  label: 'Total Interest',
-                  value: _currencyFormat.format(detail.totalInterest),
-                  icon: Icons.trending_up_rounded,
-                  color: theme.colorScheme.error,
+                    if (compact) {
+                      return Column(
+                        children: [
+                          balancePanel,
+                          const SizedBox(height: 10),
+                          metricRows,
+                        ],
+                      );
+                    }
+
+                    return Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(flex: 4, child: balancePanel),
+                        const SizedBox(width: 10),
+                        Expanded(flex: 6, child: metricRows),
+                      ],
+                    );
+                  },
                 ),
-                if (selectedMortgage.dealEndDate != null) ...[
-                  const SizedBox(height: 10),
-                  _MortgageStatChip(
-                    label: 'Deal Ends',
-                    value: DateFormat('MMM yyyy')
-                        .format(selectedMortgage.dealEndDate!),
-                    icon: Icons.event_outlined,
-                    color: _dealEndColor(context, selectedMortgage),
-                  ),
-                ],
                 const SizedBox(height: 16),
                 SizedBox(
                   width: double.infinity,
@@ -391,7 +496,7 @@ class _MortgageScreenState extends State<MortgageScreen> {
         ),
         const SizedBox(height: 16),
 
-        // ── Balance Over Time Chart ──
+        // ── Repayment Outlook (text-first summary) ──
         Card(
           clipBehavior: Clip.antiAlias,
           child: Padding(
@@ -401,22 +506,99 @@ class _MortgageScreenState extends State<MortgageScreen> {
               children: <Widget>[
                 Row(
                   children: [
-                    Icon(Icons.show_chart_rounded,
+                    Icon(Icons.insights_outlined,
                         size: 20, color: theme.colorScheme.primary),
                     const SizedBox(width: 8),
-                    Text('Balance Over Time',
-                        style: theme.textTheme.titleLarge),
+                    Expanded(
+                      child: Text(
+                        'Repayment Outlook',
+                        style: theme.textTheme.titleLarge,
+                      ),
+                    ),
                   ],
                 ),
-                const SizedBox(height: 16),
-                SizedBox(
-                  height: 200,
-                  child: TimelineChart(
-                    dataPoints: _extraOverpayment > 0
-                        ? detail.overpaymentChartData
-                        : detail.chartData,
+                const SizedBox(height: 6),
+                Text(
+                  _extraOverpayment > 0
+                      ? 'Projection includes your current overpayment scenario.'
+                      : 'Projection based on your current mortgage terms.',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
                   ),
                 ),
+                const SizedBox(height: 14),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.surfaceContainerLow,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Column(
+                    children: [
+                      _MortgageMetricRowCard(
+                        label: 'Estimated Payoff',
+                        value: _extraOverpayment > 0
+                            ? detail.overpaymentPayoffDateLabel
+                            : detail.payoffDateLabel,
+                        icon: Icons.flag_outlined,
+                        valueColor: Colors.green,
+                      ),
+                      const SizedBox(height: 8),
+                      _MortgageMetricRowCard(
+                        label: 'Time Remaining',
+                        value: _formatTerm(
+                          _extraOverpayment > 0
+                              ? detail.overpaymentMonthsToPayoff
+                              : detail.monthsToPayoff,
+                        ),
+                        icon: Icons.timelapse_rounded,
+                        valueColor: theme.colorScheme.secondary,
+                      ),
+                      const SizedBox(height: 8),
+                      _MortgageMetricRowCard(
+                        label: 'Projected Interest',
+                        value: _currencyFormat.format(
+                          _extraOverpayment > 0
+                              ? detail.overpaymentTotalInterest
+                              : detail.totalInterest,
+                        ),
+                        icon: Icons.trending_up_rounded,
+                        valueColor: theme.colorScheme.error,
+                      ),
+                    ],
+                  ),
+                ),
+                if (_extraOverpayment > 0) ...[
+                  const SizedBox(height: 12),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.green.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color: Colors.green.withValues(alpha: 0.25),
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(Icons.eco_outlined, size: 16, color: Colors.green),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'You could save ${detail.overpaymentMonthsSaved} months and '
+                            '${_currencyFormat.format(detail.overpaymentInterestSaved)} in interest.',
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: Colors.green.shade700,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ],
             ),
           ),
@@ -428,114 +610,181 @@ class _MortgageScreenState extends State<MortgageScreen> {
           clipBehavior: Clip.antiAlias,
           child: Padding(
             padding: const EdgeInsets.all(20),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                Row(
-                  children: [
-                    Icon(Icons.savings_outlined,
-                        size: 20, color: theme.colorScheme.primary),
-                    const SizedBox(width: 8),
-                    Text('Overpayment Simulator',
-                        style: theme.textTheme.titleLarge),
+            child: Builder(builder: (context) {
+              // 10% of outstanding balance per year is the typical UK lender
+              // allowance without early repayment charges.
+              final maxOverpayment =
+                  (selectedMortgage.balance * 0.10 / 12).clamp(50.0, 10000.0);
+              final roundedMax =
+                  (maxOverpayment / 50).ceil() * 50.0; // round up to £50
+              final hasUnsavedChanges =
+                  _extraOverpayment != _savedExtraOverpayment;
+              final savedApplyFrom =
+                  selectedMortgage.overpaymentStartDate;
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  Row(
+                    children: [
+                      Icon(Icons.savings_outlined,
+                          size: 20, color: theme.colorScheme.primary),
+                      const SizedBox(width: 8),
+                      Text('Overpayment Simulator',
+                          style: theme.textTheme.titleLarge),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Slider capped at 10% of your outstanding balance per year '
+                    '(${_currencyFormat.format(roundedMax * 12)}/yr) — the '
+                    'typical UK lender penalty-free limit.',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                  if (savedApplyFrom != null &&
+                      _savedExtraOverpayment > 0) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      'Currently applied from ${_monthFormat.format(savedApplyFrom)}.',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.primary,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
                   ],
-                ),
-                const SizedBox(height: 16),
-                MoneyInputSlider(
-                  label: 'Monthly overpayment',
-                  value: _extraOverpayment,
-                  min: 0,
-                  max: 500,
-                  onChanged: (double value) {
-                    setState(() {
-                      _extraOverpayment = value;
-                      _recalculate();
-                    });
-                  },
-                ),
-                const SizedBox(height: 12),
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: FilledButton.icon(
-                    onPressed: _applyOverpayment,
-                    icon: const Icon(Icons.check, size: 18),
-                    label: const Text('Apply'),
-                  ),
-                ),
-                if (_extraOverpayment > 0) ...<Widget>[
                   const SizedBox(height: 16),
-                  Container(
+                  MoneyInputSlider(
+                    label: 'Monthly overpayment',
+                    value: _extraOverpayment.clamp(0, roundedMax),
+                    min: 0,
+                    max: roundedMax,
+                    divisions: (roundedMax / 25).round().clamp(1, 200),
+                    onChanged: (double value) {
+                      setState(() {
+                        _extraOverpayment = value;
+                        _recalculate();
+                      });
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                  // ── Apply from month picker ──
+                  Row(
+                    children: [
+                      Text('Apply from:',
+                          style: theme.textTheme.bodyMedium),
+                      const SizedBox(width: 8),
+                      ActionChip(
+                        avatar: Icon(Icons.calendar_month_outlined,
+                            size: 16,
+                            color: theme.colorScheme.primary),
+                        label: Text(_monthFormat.format(_overpaymentApplyFrom)),
+                        onPressed: () async {
+                          final now = _repository.effectiveNow;
+                          final picked = await showDatePicker(
+                            context: context,
+                            initialDate: _overpaymentApplyFrom,
+                            firstDate:
+                                DateTime(now.year - 2, now.month),
+                            lastDate:
+                                DateTime(now.year + 5, now.month),
+                            helpText: 'Overpayment starts from',
+                          );
+                          if (picked != null) {
+                            setState(() {
+                              _overpaymentApplyFrom =
+                                  DateTime(picked.year, picked.month);
+                              _recalculate();
+                            });
+                          }
+                        },
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  SizedBox(
                     width: double.infinity,
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: Colors.green.withValues(alpha: 0.08),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                          color: Colors.green.withValues(alpha: 0.25)),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Icon(Icons.eco_outlined,
-                                size: 18, color: Colors.green),
-                            const SizedBox(width: 6),
-                            Text('Savings Breakdown',
-                                style: theme.textTheme.titleSmall?.copyWith(
-                                  color: Colors.green,
-                                  fontWeight: FontWeight.bold,
-                                )),
-                          ],
-                        ),
-                        const SizedBox(height: 12),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: _SavingsChip(
-                                label: 'Months Saved',
-                                value: '${detail.overpaymentMonthsSaved}',
-                                icon: Icons.calendar_today_rounded,
-                              ),
-                            ),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: _SavingsChip(
-                                label: 'Interest Saved',
-                                value: _currencyFormat
-                                    .format(detail.overpaymentInterestSaved),
-                                icon: Icons.savings_rounded,
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 10),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: _SavingsChip(
-                                label: 'New Payoff',
-                                value: detail.overpaymentPayoffDateLabel,
-                                icon: Icons.event_available_rounded,
-                              ),
-                            ),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: _SavingsChip(
-                                label: 'New Term',
-                                value: _formatTerm(
-                                    detail.overpaymentMonthsToPayoff),
-                                icon: Icons.timelapse_rounded,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
+                    child: FilledButton.icon(
+                      onPressed: hasUnsavedChanges ? _applyOverpayment : null,
+                      icon: const Icon(Icons.check, size: 18),
+                      label: Text(hasUnsavedChanges ? 'Apply' : 'Applied'),
                     ),
                   ),
+                  if (_extraOverpayment > 0) ...<Widget>[
+                    const SizedBox(height: 16),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: Colors.green.withValues(alpha: 0.08),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                            color: Colors.green.withValues(alpha: 0.25)),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Icon(Icons.eco_outlined,
+                                  size: 18, color: Colors.green),
+                              const SizedBox(width: 6),
+                              Text('Savings Breakdown',
+                                  style: theme.textTheme.titleSmall?.copyWith(
+                                    color: Colors.green,
+                                    fontWeight: FontWeight.bold,
+                                  )),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: _SavingsChip(
+                                  label: 'Months Saved',
+                                  value: '${detail.overpaymentMonthsSaved}',
+                                  icon: Icons.calendar_today_rounded,
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: _SavingsChip(
+                                  label: 'Interest Saved',
+                                  value: _currencyFormat
+                                      .format(detail.overpaymentInterestSaved),
+                                  icon: Icons.savings_rounded,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 10),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: _SavingsChip(
+                                  label: 'New Payoff',
+                                  value: detail.overpaymentPayoffDateLabel,
+                                  icon: Icons.event_available_rounded,
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: _SavingsChip(
+                                  label: 'New Term',
+                                  value: _formatTerm(
+                                      detail.overpaymentMonthsToPayoff),
+                                  icon: Icons.timelapse_rounded,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ],
-              ],
-            ),
+              );
+            }),
           ),
         ),
         const SizedBox(height: 16),
@@ -555,14 +804,14 @@ class _MortgageScreenState extends State<MortgageScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('About mortgage overpayments',
+                      Text('Overpayment simulator',
                           style: theme.textTheme.titleSmall),
                       const SizedBox(height: 6),
                       Text(
-                        'Most UK mortgage lenders allow overpayments of up to 10% '
-                        'of the outstanding balance per year without an early '
-                        'repayment charge. Check your mortgage terms before '
-                        'overpaying.',
+                        'Use the slider to model how extra monthly payments '
+                        'could reduce your balance over time. Results are '
+                        'estimates only — always check your mortgage terms '
+                        'for any overpayment limits or fees.',
                         style: theme.textTheme.bodyMedium?.copyWith(
                           color: theme.colorScheme.onSurfaceVariant,
                         ),
@@ -585,8 +834,10 @@ class _MortgageScreenState extends State<MortgageScreen> {
     final nameController = TextEditingController(
       text: existing?.name ?? 'Mortgage',
     );
-    final balanceController = TextEditingController(
-      text: existing != null ? existing.balance.toStringAsFixed(2) : '',
+    final originalLoanAmountController = TextEditingController(
+      text: existing != null
+          ? existing.originalLoanAmount.toStringAsFixed(2)
+          : '',
     );
     final rateController = TextEditingController(
       text: existing != null ? existing.annualRate.toStringAsFixed(2) : '',
@@ -594,12 +845,51 @@ class _MortgageScreenState extends State<MortgageScreen> {
     final paymentController = TextEditingController(
       text: existing != null ? existing.monthlyPayment.toStringAsFixed(2) : '',
     );
+    bool termInYears = true;
     final termController = TextEditingController(
-      text: existing != null ? existing.remainingTermMonths.toString() : '',
+      text: existing != null
+          ? (existing.mortgageTermMonths / 12).round().toString()
+          : '',
     );
+    DateTime selectedStartDate =
+        existing?.startDate ?? DateTime(DateTime.now().year, DateTime.now().month, 1);
     int selectedPaymentDay =
         existing?.paymentDay ?? _repository.financialMonthStartDay;
     DateTime? selectedDealEndDate = existing?.dealEndDate;
+    bool advancedMode = false;
+    MortgageRepaymentType repaymentType =
+        existing?.repaymentType ?? MortgageRepaymentType.repayment;
+    MortgageOwnershipType ownershipType =
+        existing?.ownershipType ?? MortgageOwnershipType.standard;
+    final ownedShareController = TextEditingController(
+      text: existing != null &&
+              existing.ownershipType == MortgageOwnershipType.sharedOwnership
+          ? existing.ownedSharePercent.toStringAsFixed(1)
+          : '',
+    );
+    final monthlyRentController = TextEditingController(
+      text: existing != null &&
+              existing.ownershipType == MortgageOwnershipType.sharedOwnership
+          ? existing.monthlyRent.toStringAsFixed(2)
+          : '',
+    );
+    final monthlyServiceChargeController = TextEditingController(
+      text: existing != null &&
+              existing.ownershipType == MortgageOwnershipType.sharedOwnership
+          ? existing.monthlyServiceCharge.toStringAsFixed(2)
+          : '',
+    );
+    final monthlyGroundRentController = TextEditingController(
+      text: existing != null &&
+              existing.ownershipType == MortgageOwnershipType.sharedOwnership
+          ? existing.monthlyGroundRent.toStringAsFixed(2)
+          : '',
+    );
+    if (existing != null &&
+        (existing.ownershipType == MortgageOwnershipType.sharedOwnership ||
+            existing.repaymentType == MortgageRepaymentType.interestOnly)) {
+      advancedMode = true;
+    }
 
     showDialog<void>(
       context: context,
@@ -607,23 +897,138 @@ class _MortgageScreenState extends State<MortgageScreen> {
         return StatefulBuilder(
           builder: (BuildContext context,
               void Function(void Function()) setDialogState) {
+            final previewOriginalAmount =
+                AmountParser.tryParse(originalLoanAmountController.text);
+            final previewRate = AmountParser.tryParse(rateController.text);
+            final previewPayment =
+                AmountParser.tryParse(paymentController.text);
+            final previewTermRaw = double.tryParse(termController.text.trim());
+            final previewTermMonths = previewTermRaw != null
+                ? (termInYears
+                    ? (previewTermRaw * 12).round()
+                    : previewTermRaw.toInt())
+                : null;
+            final previewMonthlyInterest =
+                (previewOriginalAmount != null && previewRate != null)
+                    ? MortgageMath.monthlyInterest(previewOriginalAmount, previewRate)
+                    : null;
+            final inferredTerm = (previewOriginalAmount != null &&
+                    previewRate != null &&
+                    previewPayment != null)
+                ? MortgageMath.termForPayment(
+                    principal: previewOriginalAmount,
+                    annualRate: previewRate,
+                    monthlyPayment: previewPayment,
+                  )
+                : null;
+            final inferredPayment = (previewOriginalAmount != null &&
+                    previewRate != null &&
+                    previewTermMonths != null &&
+                    previewTermMonths > 0)
+                ? MortgageMath.paymentForTerm(
+                    principal: previewOriginalAmount,
+                    annualRate: previewRate,
+                    termMonths: previewTermMonths,
+                  )
+                : null;
+
             return AlertDialog(
               title: Text(existing != null ? 'Edit Mortgage' : 'Add Mortgage'),
               content: SingleChildScrollView(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: <Widget>[
+                    SwitchListTile.adaptive(
+                      value: advancedMode,
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('Advanced mode'),
+                      subtitle: const Text(
+                        'Auto-infer term/payment, repayment type and Shared Ownership fields.',
+                      ),
+                      onChanged: (value) =>
+                          setDialogState(() => advancedMode = value),
+                    ),
+                    const SizedBox(height: 8),
+                    SegmentedButton<MortgageOwnershipType>(
+                      segments: const [
+                        ButtonSegment(
+                          value: MortgageOwnershipType.standard,
+                          label: Text('Standard'),
+                        ),
+                        ButtonSegment(
+                          value: MortgageOwnershipType.sharedOwnership,
+                          label: Text('Shared Ownership'),
+                        ),
+                      ],
+                      selected: <MortgageOwnershipType>{ownershipType},
+                      onSelectionChanged: (selected) {
+                        setDialogState(() {
+                          ownershipType = selected.first;
+                        });
+                      },
+                    ),
+                    if (advancedMode) ...[
+                      const SizedBox(height: 8),
+                      SegmentedButton<MortgageRepaymentType>(
+                        segments: const [
+                          ButtonSegment(
+                            value: MortgageRepaymentType.repayment,
+                            label: Text('Repayment'),
+                          ),
+                          ButtonSegment(
+                            value: MortgageRepaymentType.interestOnly,
+                            label: Text('Interest-only'),
+                          ),
+                        ],
+                        selected: <MortgageRepaymentType>{repaymentType},
+                        onSelectionChanged: (selected) {
+                          setDialogState(() {
+                            repaymentType = selected.first;
+                            if (repaymentType ==
+                                    MortgageRepaymentType.interestOnly &&
+                                previewMonthlyInterest != null) {
+                              paymentController.text =
+                                  previewMonthlyInterest.toStringAsFixed(2);
+                            }
+                          });
+                        },
+                      ),
+                    ],
+                    const SizedBox(height: 8),
                     TextField(
                       controller: nameController,
                       decoration: const InputDecoration(labelText: 'Name'),
                     ),
                     const SizedBox(height: 8),
+                    // Mortgage start date picker
+                    ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('Mortgage start date'),
+                      subtitle: Text(
+                        '${selectedStartDate.day.toString().padLeft(2, '0')}/'
+                        '${selectedStartDate.month.toString().padLeft(2, '0')}/'
+                        '${selectedStartDate.year}',
+                      ),
+                      trailing: const Icon(Icons.calendar_today),
+                      onTap: () async {
+                        final picked = await showDatePicker(
+                          context: dialogContext,
+                          initialDate: selectedStartDate,
+                          firstDate: DateTime(1980),
+                          lastDate: DateTime.now(),
+                        );
+                        if (picked != null) {
+                          setDialogState(() => selectedStartDate = picked);
+                        }
+                      },
+                    ),
+                    const SizedBox(height: 8),
                     TextField(
-                      controller: balanceController,
+                      controller: originalLoanAmountController,
                       keyboardType:
                           const TextInputType.numberWithOptions(decimal: true),
                       decoration: const InputDecoration(
-                        labelText: 'Outstanding balance',
+                        labelText: 'Original loan amount',
                         prefixText: '£',
                       ),
                     ),
@@ -642,8 +1047,11 @@ class _MortgageScreenState extends State<MortgageScreen> {
                       controller: paymentController,
                       keyboardType:
                           const TextInputType.numberWithOptions(decimal: true),
-                      decoration: const InputDecoration(
-                        labelText: 'Monthly payment',
+                      decoration: InputDecoration(
+                        labelText:
+                            repaymentType == MortgageRepaymentType.interestOnly
+                                ? 'Monthly payment (interest-only)'
+                                : 'Monthly payment',
                         prefixText: '£',
                       ),
                     ),
@@ -675,11 +1083,162 @@ class _MortgageScreenState extends State<MortgageScreen> {
                     const SizedBox(height: 8),
                     TextField(
                       controller: termController,
-                      keyboardType: TextInputType.number,
-                      decoration: const InputDecoration(
-                        labelText: 'Remaining term (months)',
+                      keyboardType: const TextInputType.numberWithOptions(
+                          decimal: true),
+                      decoration: InputDecoration(
+                        labelText: termInYears
+                            ? 'Mortgage term (years)'
+                            : 'Mortgage term (months)',
+                        helperText: advancedMode
+                            ? 'Leave blank to auto-infer from payment.'
+                            : null,
                       ),
                     ),
+                    const SizedBox(height: 4),
+                    SegmentedButton<bool>(
+                      style: const ButtonStyle(
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        visualDensity:
+                            VisualDensity(horizontal: -1, vertical: -2),
+                      ),
+                      segments: const [
+                        ButtonSegment(value: true, label: Text('Years')),
+                        ButtonSegment(value: false, label: Text('Months')),
+                      ],
+                      selected: {termInYears},
+                      onSelectionChanged: (selected) {
+                        final newInYears = selected.first;
+                        if (newInYears == termInYears) return;
+                        setDialogState(() {
+                          final raw = termController.text.trim();
+                          if (newInYears) {
+                            final months = int.tryParse(raw);
+                            if (months != null) {
+                              termController.text =
+                                  (months / 12).round().toString();
+                            }
+                          } else {
+                            final years = double.tryParse(raw);
+                            if (years != null) {
+                              termController.text =
+                                  (years * 12).round().toString();
+                            }
+                          }
+                          termInYears = newInYears;
+                        });
+                      },
+                    ),
+                    if (ownershipType ==
+                        MortgageOwnershipType.sharedOwnership) ...[
+                      const SizedBox(height: 8),
+                      TextField(
+                        controller: ownedShareController,
+                        keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true),
+                        decoration: const InputDecoration(
+                          labelText: 'Owned share (%)',
+                          suffixText: '%',
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      TextField(
+                        controller: monthlyRentController,
+                        keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true),
+                        decoration: const InputDecoration(
+                          labelText: 'Monthly rent (unowned share)',
+                          prefixText: '£',
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      TextField(
+                        controller: monthlyServiceChargeController,
+                        keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true),
+                        decoration: const InputDecoration(
+                          labelText: 'Monthly service charge',
+                          prefixText: '£',
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      TextField(
+                        controller: monthlyGroundRentController,
+                        keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true),
+                        decoration: const InputDecoration(
+                          labelText: 'Monthly ground rent',
+                          prefixText: '£',
+                        ),
+                      ),
+                    ],
+                    if (advancedMode) ...[
+                      const SizedBox(height: 8),
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color:
+                              Theme.of(context).colorScheme.surfaceContainerLow,
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(
+                            color: Theme.of(context).colorScheme.outlineVariant,
+                          ),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Auto-calculation',
+                              style: Theme.of(context).textTheme.titleSmall,
+                            ),
+                            const SizedBox(height: 6),
+                            if (previewMonthlyInterest != null)
+                              Text(
+                                'Monthly interest only: £${previewMonthlyInterest.toStringAsFixed(2)}',
+                                style: Theme.of(context).textTheme.bodySmall,
+                              ),
+                            if (inferredTerm != null)
+                              Text(
+                                'Inferred term from payment: $inferredTerm months',
+                                style: Theme.of(context).textTheme.bodySmall,
+                              ),
+                            if (inferredPayment != null)
+                              Text(
+                                'Inferred payment from term: £${inferredPayment.toStringAsFixed(2)}',
+                                style: Theme.of(context).textTheme.bodySmall,
+                              ),
+                            const SizedBox(height: 8),
+                            Wrap(
+                              spacing: 8,
+                              children: [
+                                OutlinedButton(
+                                  onPressed: inferredTerm == null
+                                      ? null
+                                      : () => setDialogState(() {
+                                            termController.text = termInYears
+                                                ? (inferredTerm / 12)
+                                                    .round()
+                                                    .toString()
+                                                : inferredTerm.toString();
+                                          }),
+                                  child: const Text('Use inferred term'),
+                                ),
+                                OutlinedButton(
+                                  onPressed: inferredPayment == null
+                                      ? null
+                                      : () => setDialogState(() {
+                                            paymentController.text =
+                                                inferredPayment
+                                                    .toStringAsFixed(2);
+                                          }),
+                                  child: const Text('Use inferred payment'),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                     const SizedBox(height: 8),
                     // ── Deal end date picker ──
                     InkWell(
@@ -739,12 +1298,26 @@ class _MortgageScreenState extends State<MortgageScreen> {
                 FilledButton(
                   onPressed: () async {
                     final name = nameController.text.trim();
-                    final balance =
-                        AmountParser.tryParse(balanceController.text);
-                    final rate = double.tryParse(rateController.text.trim());
-                    final payment =
+                    final originalLoanAmount =
+                        AmountParser.tryParse(originalLoanAmountController.text);
+                    final rate = AmountParser.tryParse(rateController.text);
+                    final paymentInput =
                         AmountParser.tryParse(paymentController.text);
-                    final term = int.tryParse(termController.text.trim());
+                    final termText = termController.text.trim();
+                    final term = termInYears
+                        ? (double.tryParse(termText) != null
+                            ? (double.parse(termText) * 12).round()
+                            : null)
+                        : int.tryParse(termText);
+                    final ownedShareInput =
+                        AmountParser.tryParse(ownedShareController.text);
+                    final monthlyRentInput =
+                        AmountParser.tryParse(monthlyRentController.text);
+                    final monthlyServiceChargeInput = AmountParser.tryParse(
+                      monthlyServiceChargeController.text,
+                    );
+                    final monthlyGroundRentInput =
+                        AmountParser.tryParse(monthlyGroundRentController.text);
 
                     final messenger = ScaffoldMessenger.of(this.context);
                     if (name.isEmpty) {
@@ -757,19 +1330,19 @@ class _MortgageScreenState extends State<MortgageScreen> {
                         );
                       return;
                     }
-                    if (balance == null || balance <= 0) {
+                    if (originalLoanAmount == null || originalLoanAmount <= 0) {
                       messenger
                         ..hideCurrentSnackBar()
                         ..showSnackBar(
                           const SnackBar(
                             content: Text(
-                                'Outstanding balance must be greater than 0.'),
+                                'Original loan amount must be greater than 0.'),
                           ),
                         );
                       return;
                     }
                     if (!AmountParser.hasMaxDecimalPlaces(
-                          balanceController.text,
+                          originalLoanAmountController.text,
                           2,
                         ) ||
                         !AmountParser.hasMaxDecimalPlaces(
@@ -779,13 +1352,25 @@ class _MortgageScreenState extends State<MortgageScreen> {
                         !AmountParser.hasMaxDecimalPlaces(
                           paymentController.text,
                           2,
+                        ) ||
+                        !AmountParser.hasMaxDecimalPlaces(
+                          monthlyRentController.text,
+                          2,
+                        ) ||
+                        !AmountParser.hasMaxDecimalPlaces(
+                          monthlyServiceChargeController.text,
+                          2,
+                        ) ||
+                        !AmountParser.hasMaxDecimalPlaces(
+                          monthlyGroundRentController.text,
+                          2,
                         )) {
                       messenger
                         ..hideCurrentSnackBar()
                         ..showSnackBar(
                           const SnackBar(
                             content: Text(
-                                'Balance, APR and payment can have at most 2 decimal places.'),
+                                'Amount, APR and payment can have at most 2 decimal places.'),
                           ),
                         );
                       return;
@@ -801,31 +1386,115 @@ class _MortgageScreenState extends State<MortgageScreen> {
                         );
                       return;
                     }
-                    if (payment == null || payment <= 0) {
-                      messenger
-                        ..hideCurrentSnackBar()
-                        ..showSnackBar(
-                          const SnackBar(
-                            content:
-                                Text('Monthly payment must be greater than 0.'),
-                          ),
-                        );
-                      return;
-                    }
-                    if (term == null || term <= 0) {
-                      messenger
-                        ..hideCurrentSnackBar()
-                        ..showSnackBar(
-                          const SnackBar(
-                            content: Text(
-                                'Remaining term (months) must be greater than 0.'),
-                          ),
-                        );
-                      return;
+
+                    if (ownershipType ==
+                        MortgageOwnershipType.sharedOwnership) {
+                      final ownedShare = ownedShareInput;
+                      if (ownedShare == null ||
+                          ownedShare <= 0 ||
+                          ownedShare > 100) {
+                        messenger
+                          ..hideCurrentSnackBar()
+                          ..showSnackBar(
+                            const SnackBar(
+                              content: Text(
+                                  'Owned share must be between 0 and 100.'),
+                            ),
+                          );
+                        return;
+                      }
+                      if ((monthlyRentInput ?? 0) < 0 ||
+                          (monthlyServiceChargeInput ?? 0) < 0 ||
+                          (monthlyGroundRentInput ?? 0) < 0) {
+                        messenger
+                          ..hideCurrentSnackBar()
+                          ..showSnackBar(
+                            const SnackBar(
+                              content:
+                                  Text('Rent and charges cannot be negative.'),
+                            ),
+                          );
+                        return;
+                      }
                     }
 
-                    final monthlyInterestOnly = balance * (rate / 100) / 12;
-                    if (rate > 0 && payment <= monthlyInterestOnly) {
+                    final monthlyInterestOnly = originalLoanAmount * (rate / 100) / 12;
+                    double? resolvedPayment = paymentInput;
+                    int? resolvedTerm = term;
+
+                    if (advancedMode &&
+                        repaymentType == MortgageRepaymentType.interestOnly) {
+                      resolvedPayment ??= monthlyInterestOnly;
+                      resolvedTerm ??= existing?.mortgageTermMonths;
+                      if (resolvedTerm == null || resolvedTerm <= 0) {
+                        messenger
+                          ..hideCurrentSnackBar()
+                          ..showSnackBar(
+                            const SnackBar(
+                              content: Text(
+                                  'Set a mortgage term (months) for interest-only mortgages.'),
+                            ),
+                          );
+                        return;
+                      }
+                      if (resolvedPayment < monthlyInterestOnly) {
+                        messenger
+                          ..hideCurrentSnackBar()
+                          ..showSnackBar(
+                            const SnackBar(
+                              content: Text(
+                                'Interest-only payment must be at least the monthly interest amount.',
+                              ),
+                            ),
+                          );
+                        return;
+                      }
+                    } else {
+                      if (resolvedPayment == null || resolvedPayment <= 0) {
+                        if (resolvedTerm != null && resolvedTerm > 0) {
+                          resolvedPayment = MortgageMath.paymentForTerm(
+                            principal: originalLoanAmount,
+                            annualRate: rate,
+                            termMonths: resolvedTerm,
+                          );
+                        } else {
+                          messenger
+                            ..hideCurrentSnackBar()
+                            ..showSnackBar(
+                              const SnackBar(
+                                content: Text(
+                                    'Monthly payment must be greater than 0.'),
+                              ),
+                            );
+                          return;
+                        }
+                      }
+
+                      if (resolvedTerm == null || resolvedTerm <= 0) {
+                        if (resolvedPayment != null && resolvedPayment > 0) {
+                          resolvedTerm = MortgageMath.termForPayment(
+                            principal: originalLoanAmount,
+                            annualRate: rate,
+                            monthlyPayment: resolvedPayment,
+                          );
+                        }
+                        if (resolvedTerm == null || resolvedTerm <= 0) {
+                          messenger
+                            ..hideCurrentSnackBar()
+                            ..showSnackBar(
+                              const SnackBar(
+                                content: Text(
+                                    'Enter a valid term or monthly payment.'),
+                              ),
+                            );
+                          return;
+                        }
+                      }
+                    }
+
+                    if (rate > 0 &&
+                        repaymentType == MortgageRepaymentType.repayment &&
+                        resolvedPayment <= monthlyInterestOnly) {
                       messenger
                         ..hideCurrentSnackBar()
                         ..showSnackBar(
@@ -838,7 +1507,7 @@ class _MortgageScreenState extends State<MortgageScreen> {
                       return;
                     }
 
-                    if (balance > 5000000 || payment > 50000) {
+                    if (originalLoanAmount > 5000000 || resolvedPayment > 50000) {
                       final proceedHighValue = await showDialog<bool>(
                             context: dialogContext,
                             builder: (ctx) => AlertDialog(
@@ -869,7 +1538,8 @@ class _MortgageScreenState extends State<MortgageScreen> {
                       final proceedDayGap = await showDialog<bool>(
                             context: dialogContext,
                             builder: (ctx) => AlertDialog(
-                              title: const Text('Payment day far from salary day'),
+                              title:
+                                  const Text('Payment day far from salary day'),
                               content: Text(
                                 'Your mortgage payment day (day $selectedPaymentDay) is quite far from your financial month start day (day $salaryDay).\n\nContinue anyway?',
                               ),
@@ -896,12 +1566,31 @@ class _MortgageScreenState extends State<MortgageScreen> {
                     _repository.saveMortgage(Mortgage(
                       id: mortgageId,
                       name: name,
-                      balance: balance,
+                      startDate: selectedStartDate,
+                      originalLoanAmount: originalLoanAmount,
+                      mortgageTermMonths: resolvedTerm,
                       annualRate: rate,
-                      monthlyPayment: payment,
-                      remainingTermMonths: term,
+                      monthlyPayment: resolvedPayment,
                       paymentDay: selectedPaymentDay,
                       dealEndDate: selectedDealEndDate,
+                      ownershipType: ownershipType,
+                      repaymentType: repaymentType,
+                      ownedSharePercent:
+                          ownershipType == MortgageOwnershipType.sharedOwnership
+                              ? (ownedShareInput ?? 100)
+                              : 100,
+                      monthlyRent:
+                          ownershipType == MortgageOwnershipType.sharedOwnership
+                              ? (monthlyRentInput ?? 0)
+                              : 0,
+                      monthlyServiceCharge:
+                          ownershipType == MortgageOwnershipType.sharedOwnership
+                              ? (monthlyServiceChargeInput ?? 0)
+                              : 0,
+                      monthlyGroundRent:
+                          ownershipType == MortgageOwnershipType.sharedOwnership
+                              ? (monthlyGroundRentInput ?? 0)
+                              : 0,
                     ));
                     _selectedMortgageId = mortgageId;
                     Navigator.pop(dialogContext);
@@ -949,13 +1638,56 @@ class _MortgageScreenState extends State<MortgageScreen> {
     return '$years years $remainingMonths months';
   }
 
+  Widget _buildSharedOwnershipBreakdown(
+    BuildContext context,
+    Mortgage mortgage,
+  ) {
+    final theme = Theme.of(context);
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.tertiaryContainer.withValues(alpha: 0.65),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: theme.colorScheme.tertiary.withValues(alpha: 0.25),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Shared Ownership monthly costs',
+            style: theme.textTheme.titleSmall?.copyWith(
+              color: theme.colorScheme.onTertiaryContainer,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Owned share: ${mortgage.ownedSharePercent.toStringAsFixed(1)}%',
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onTertiaryContainer,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Rent: ${_currencyFormat.format(mortgage.monthlyRent)}  •  Service: ${_currencyFormat.format(mortgage.monthlyServiceCharge)}  •  Ground rent: ${_currencyFormat.format(mortgage.monthlyGroundRent)}',
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onTertiaryContainer,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   // ── Deal expiry helpers ──────────────────────────────────────────────────
 
   /// Returns the number of months until the deal ends (0 if already past).
   int _monthsUntilDealEnd(DateTime dealEnd) {
     final now = DateTime.now();
-    final months =
-        (dealEnd.year - now.year) * 12 + (dealEnd.month - now.month);
+    final months = (dealEnd.year - now.year) * 12 + (dealEnd.month - now.month);
     return math.max(0, months);
   }
 
@@ -990,8 +1722,7 @@ class _MortgageScreenState extends State<MortgageScreen> {
       colour = Colors.orange;
       icon = Icons.schedule_rounded;
     } else {
-      message =
-          'Fixed deal ends ${DateFormat('MMM yyyy').format(dealEnd)} '
+      message = 'Fixed deal ends ${DateFormat('MMM yyyy').format(dealEnd)} '
           '($months months).';
       colour = Colors.blue;
       icon = Icons.info_outline_rounded;
@@ -1042,8 +1773,8 @@ class _MortgageScreenState extends State<MortgageScreen> {
       projected = monthsAhead > 0
           ? _projectMortgageForReference(
               current,
-              DateTime(now.year + monthsAhead ~/ 12,
-                  now.month + monthsAhead % 12))
+              DateTime(
+                  now.year + monthsAhead ~/ 12, now.month + monthsAhead % 12))
           : current;
     } else {
       projected = current;
@@ -1054,8 +1785,9 @@ class _MortgageScreenState extends State<MortgageScreen> {
       text: projectedBalance.toStringAsFixed(2),
     );
     final rateController = TextEditingController();
+    bool termInYears = true;
     final termController = TextEditingController(
-      text: projected.remainingTermMonths.toString(),
+      text: (projected.remainingTermMonths / 12).round().toString(),
     );
     // Calculated payment, updated reactively.
     String calculatedPayment = '—';
@@ -1065,7 +1797,10 @@ class _MortgageScreenState extends State<MortgageScreen> {
         void Function(void Function()) setDialogState, String _) {
       final bal = AmountParser.tryParse(balanceController.text) ?? 0;
       final rate = double.tryParse(rateController.text.trim());
-      final term = int.tryParse(termController.text.trim());
+      final termRaw = double.tryParse(termController.text.trim());
+      final term = termRaw != null
+          ? (termInYears ? (termRaw * 12).round() : termRaw.toInt())
+          : null;
       if (rate != null && term != null && bal > 0) {
         final p = _calcPayment(bal, rate, term);
         setDialogState(() => calculatedPayment = '£${p.toStringAsFixed(2)}/mo');
@@ -1115,8 +1850,8 @@ class _MortgageScreenState extends State<MortgageScreen> {
                     ],
                     TextField(
                       controller: balanceController,
-                      keyboardType: const TextInputType.numberWithOptions(
-                          decimal: true),
+                      keyboardType:
+                          const TextInputType.numberWithOptions(decimal: true),
                       decoration: const InputDecoration(
                         labelText: 'New balance',
                         prefixText: '£',
@@ -1127,8 +1862,8 @@ class _MortgageScreenState extends State<MortgageScreen> {
                     const SizedBox(height: 8),
                     TextField(
                       controller: rateController,
-                      keyboardType: const TextInputType.numberWithOptions(
-                          decimal: true),
+                      keyboardType:
+                          const TextInputType.numberWithOptions(decimal: true),
                       decoration: const InputDecoration(
                         labelText: 'New interest rate (%)',
                         suffixText: '%',
@@ -1139,12 +1874,52 @@ class _MortgageScreenState extends State<MortgageScreen> {
                     const SizedBox(height: 8),
                     TextField(
                       controller: termController,
-                      keyboardType: TextInputType.number,
-                      decoration: const InputDecoration(
-                        labelText: 'New term (months)',
-                        helperText: 'Pre-filled with remaining term',
+                      keyboardType: const TextInputType.numberWithOptions(
+                          decimal: true),
+                      decoration: InputDecoration(
+                        labelText: termInYears
+                            ? 'New term (years)'
+                            : 'New term (months)',
+                        helperText: termInYears
+                            ? 'Pre-filled with remaining term in years'
+                            : 'Pre-filled with remaining term',
                       ),
                       onChanged: (v) => updatePayment(setDialogState, v),
+                    ),
+                    const SizedBox(height: 4),
+                    SegmentedButton<bool>(
+                      style: const ButtonStyle(
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        visualDensity:
+                            VisualDensity(horizontal: -1, vertical: -2),
+                      ),
+                      segments: const [
+                        ButtonSegment(value: true, label: Text('Years')),
+                        ButtonSegment(value: false, label: Text('Months')),
+                      ],
+                      selected: {termInYears},
+                      onSelectionChanged: (selected) {
+                        final newInYears = selected.first;
+                        if (newInYears == termInYears) return;
+                        setDialogState(() {
+                          final raw = termController.text.trim();
+                          if (newInYears) {
+                            final months = int.tryParse(raw);
+                            if (months != null) {
+                              termController.text =
+                                  (months / 12).round().toString();
+                            }
+                          } else {
+                            final years = double.tryParse(raw);
+                            if (years != null) {
+                              termController.text =
+                                  (years * 12).round().toString();
+                            }
+                          }
+                          termInYears = newInYears;
+                        });
+                        updatePayment(setDialogState, '');
+                      },
                     ),
                     const SizedBox(height: 12),
                     // ── Calculated payment banner ──
@@ -1183,8 +1958,8 @@ class _MortgageScreenState extends State<MortgageScreen> {
                         final n = DateTime.now();
                         final picked = await showDatePicker(
                           context: ctx,
-                          initialDate: newDealEndDate ??
-                              DateTime(n.year + 2, n.month),
+                          initialDate:
+                              newDealEndDate ?? DateTime(n.year + 2, n.month),
                           firstDate: DateTime(n.year, n.month),
                           lastDate: DateTime(n.year + 30),
                           helpText: 'New deal end date (optional)',
@@ -1232,11 +2007,14 @@ class _MortgageScreenState extends State<MortgageScreen> {
                 ),
                 FilledButton(
                   onPressed: () {
-                    final bal =
-                        AmountParser.tryParse(balanceController.text);
-                    final rate =
-                        double.tryParse(rateController.text.trim());
-                    final term = int.tryParse(termController.text.trim());
+                    final bal = AmountParser.tryParse(balanceController.text);
+                    final rate = double.tryParse(rateController.text.trim());
+                    final termText = termController.text.trim();
+                    final term = termInYears
+                        ? (double.tryParse(termText) != null
+                            ? (double.parse(termText) * 12).round()
+                            : null)
+                        : int.tryParse(termText);
                     final messenger = ScaffoldMessenger.of(this.context);
 
                     if (bal == null || bal <= 0) {
@@ -1250,8 +2028,7 @@ class _MortgageScreenState extends State<MortgageScreen> {
                       messenger
                         ..hideCurrentSnackBar()
                         ..showSnackBar(const SnackBar(
-                            content: Text(
-                                'Rate must be between 0 and 100.')));
+                            content: Text('Rate must be between 0 and 100.')));
                       return;
                     }
                     if (term == null || term <= 0) {
@@ -1263,12 +2040,15 @@ class _MortgageScreenState extends State<MortgageScreen> {
                     }
 
                     final payment = _calcPayment(bal, rate, term);
+                    // For remortgage: treat the new balance as the fresh
+                    // original loan amount and reset the start date to today.
                     _repository.saveMortgage(
                       current.copyWith(
-                        balance: bal,
+                        startDate: DateTime(now.year, now.month, 1),
+                        originalLoanAmount: bal,
+                        mortgageTermMonths: term,
                         annualRate: rate,
                         monthlyPayment: payment,
-                        remainingTermMonths: term,
                         overpayment: 0,
                         dealEndDate: newDealEndDate,
                       ),
@@ -1277,8 +2057,7 @@ class _MortgageScreenState extends State<MortgageScreen> {
                     ScaffoldMessenger.of(this.context)
                       ..hideCurrentSnackBar()
                       ..showSnackBar(SnackBar(
-                        content: Text(
-                            'Remortgage applied — new payment '
+                        content: Text('Remortgage applied — new payment '
                             '£${payment.toStringAsFixed(2)}/mo at $rate%'),
                         duration: const Duration(seconds: 3),
                       ));
@@ -1294,41 +2073,60 @@ class _MortgageScreenState extends State<MortgageScreen> {
   }
 }
 
-class _MortgageStatChip extends StatelessWidget {
-  const _MortgageStatChip({
+class _MortgageMetricRowCard extends StatelessWidget {
+  const _MortgageMetricRowCard({
     required this.label,
     required this.value,
     required this.icon,
-    required this.color,
+    required this.valueColor,
   });
 
   final String label;
   final String value;
   final IconData icon;
-  final Color color;
+  final Color valueColor;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: color.withValues(alpha: 0.25)),
+        border: Border.all(color: theme.colorScheme.outlineVariant),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Row(
         children: [
-          Icon(icon, size: 16, color: color),
-          const SizedBox(height: 6),
-          Text(value,
-              style: theme.textTheme.bodyMedium
-                  ?.copyWith(fontWeight: FontWeight.bold, color: color)),
-          const SizedBox(height: 2),
-          Text(label,
-              style: theme.textTheme.bodySmall
-                  ?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+          CircleAvatar(
+            radius: 13,
+            backgroundColor: valueColor.withValues(alpha: 0.12),
+            child: Icon(icon, size: 14, color: valueColor),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              label,
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Flexible(
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerRight,
+              child: Text(
+                value,
+                maxLines: 1,
+                softWrap: false,
+                style: theme.textTheme.titleMedium?.copyWith(
+                  color: valueColor,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ),
         ],
       ),
     );

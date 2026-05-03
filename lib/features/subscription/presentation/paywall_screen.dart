@@ -24,9 +24,13 @@ class _PaywallScreenState extends State<PaywallScreen> {
               leading: IconButton(
                 icon: const Icon(Icons.arrow_back),
                 onPressed: () async {
-                  await SubscriptionService.instance
-                      .setDeveloperAccessScenario(
-                          DeveloperAccessScenario.activeTrial);
+                  if (sub.isTrialActive) {
+                    Navigator.of(context).pop();
+                  } else {
+                    await SubscriptionService.instance
+                        .setDeveloperAccessScenario(
+                            DeveloperAccessScenario.activeTrial);
+                  }
                 },
               ),
               title: const Text('DEV: Paywall Preview'),
@@ -66,7 +70,9 @@ class _PaywallScreenState extends State<PaywallScreen> {
 
                   // Title
                   Text(
-                    'Your Free Trial Has Ended',
+                    sub.isTrialActive
+                        ? 'Upgrade to Premium'
+                        : 'Your Free Trial Has Ended',
                     style: theme.textTheme.headlineSmall?.copyWith(
                       fontWeight: FontWeight.bold,
                     ),
@@ -75,8 +81,10 @@ class _PaywallScreenState extends State<PaywallScreen> {
                   const SizedBox(height: 12),
 
                   Text(
-                    'Subscribe to continue using Debt Free and keep '
-                    'your data, insights, and progress.',
+                    sub.isTrialActive
+                        ? 'Subscribe now to unlock AI-powered insights and keep full access after your trial.'
+                        : 'Subscribe to continue using Debt Free and keep '
+                            'your data, insights, and progress.',
                     style: theme.textTheme.bodyLarge?.copyWith(
                       color: theme.colorScheme.onSurfaceVariant,
                     ),

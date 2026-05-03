@@ -30,9 +30,7 @@ class FinancialSummary {
 
   bool get hasMinimumData =>
       incomeSources.isNotEmpty &&
-      (debts.isNotEmpty ||
-          mortgages.isNotEmpty ||
-          mortgage != null);
+      (debts.isNotEmpty || mortgages.isNotEmpty || mortgage != null);
 
   String toPromptText() {
     final buffer = StringBuffer();
@@ -106,8 +104,13 @@ class FinancialSummary {
     buffer.writeln(
       'Total minimum debt payments: £${budgetSnapshot.totalMinimumPayments.toStringAsFixed(2)}',
     );
+    if (budgetSnapshot.totalRecurringExtraDebtPayments > 0) {
+      buffer.writeln(
+        'Total recurring extra debt payments: £${budgetSnapshot.totalRecurringExtraDebtPayments.toStringAsFixed(2)}',
+      );
+    }
     buffer.writeln(
-      'Mortgage payment: £${budgetSnapshot.mortgagePayment.toStringAsFixed(2)}',
+      'Mortgage and housing costs: £${budgetSnapshot.mortgagePayment.toStringAsFixed(2)}',
     );
     buffer.writeln(
       'Salary sacrifice net cost: £${budgetSnapshot.salarySacrificeNetCost.toStringAsFixed(2)}',
@@ -125,10 +128,14 @@ class FinancialSummary {
       buffer.writeln('No debts recorded.');
     } else {
       for (final debt in debts) {
+        final recurringExtra = debt.extraPayments
+            .where((e) => e.id.startsWith('recurring-extra-'))
+            .fold<double>(0, (sum, e) => sum + e.amount);
         buffer.writeln(
           '- ${debt.name}: balance £${debt.balance.toStringAsFixed(2)}, '
           'APR ${debt.apr.toStringAsFixed(1)}%, '
-          'minimum payment £${debt.currentMinPayment().toStringAsFixed(2)}/month',
+          'minimum payment £${debt.currentMinPayment().toStringAsFixed(2)}/month'
+          '${recurringExtra > 0 ? ', recurring extra payment £${recurringExtra.toStringAsFixed(2)}/month' : ''}',
         );
       }
       final totalDebt = debts.fold<double>(
@@ -152,18 +159,39 @@ class FinancialSummary {
       for (final m in effectiveMortgages) {
         buffer.writeln('- ${m.name}');
         buffer.writeln('  Balance: £${m.balance.toStringAsFixed(2)}');
+        buffer.writeln('  Mortgage type: ${m.ownershipType.name}');
+        buffer.writeln('  Repayment type: ${m.repaymentType.name}');
         buffer.writeln('  Annual rate: ${m.annualRate.toStringAsFixed(2)}%');
-        buffer.writeln('  Monthly payment: £${m.monthlyPayment.toStringAsFixed(2)}');
+        buffer.writeln(
+            '  Monthly payment: £${m.monthlyPayment.toStringAsFixed(2)}');
         buffer.writeln('  Remaining term: ${m.remainingTermMonths} months');
         if (m.overpayment > 0) {
           buffer.writeln(
             '  Current overpayment: £${m.overpayment.toStringAsFixed(2)}/month',
           );
         }
+        if (m.ownershipType == MortgageOwnershipType.sharedOwnership) {
+          buffer.writeln(
+            '  Owned share: ${m.ownedSharePercent.toStringAsFixed(1)}%',
+          );
+          buffer.writeln(
+            '  Monthly rent: £${m.monthlyRent.toStringAsFixed(2)}',
+          );
+          buffer.writeln(
+            '  Monthly service charge: £${m.monthlyServiceCharge.toStringAsFixed(2)}',
+          );
+          buffer.writeln(
+            '  Monthly ground rent: £${m.monthlyGroundRent.toStringAsFixed(2)}',
+          );
+          buffer.writeln(
+            '  Total monthly housing cost: £${m.totalMonthlyHousingCost.toStringAsFixed(2)}',
+          );
+        }
       }
       final totalMortgageBalance =
           effectiveMortgages.fold<double>(0, (sum, m) => sum + m.balance);
-      buffer.writeln('Total mortgage balance: £${totalMortgageBalance.toStringAsFixed(2)}');
+      buffer.writeln(
+          'Total mortgage balance: £${totalMortgageBalance.toStringAsFixed(2)}');
     }
 
     if (scenarioOverview != null) {
@@ -201,8 +229,7 @@ class FinancialSummary {
       buffer.writeln();
       buffer.writeln('=== RECENT MONTHLY TRACKING ===');
       for (final month in recentTracking) {
-        final label =
-            '${_monthName(month.period.month)} ${month.period.year}';
+        final label = '${_monthName(month.period.month)} ${month.period.year}';
         final status = month.period.isClosed ? 'closed' : 'open';
         buffer.writeln('--- $label ($status) ---');
         buffer.writeln(
@@ -284,8 +311,19 @@ class FinancialSummary {
 
   static String _monthName(int month) {
     const names = <String>[
-      '', 'January', 'February', 'March', 'April', 'May', 'June',
-      'July', 'August', 'September', 'October', 'November', 'December',
+      '',
+      'January',
+      'February',
+      'March',
+      'April',
+      'May',
+      'June',
+      'July',
+      'August',
+      'September',
+      'October',
+      'November',
+      'December',
     ];
     return names[month];
   }
@@ -295,9 +333,8 @@ class FinancialSummary {
         .where((month) => month.hasAnyActuals)
         .toList(growable: false)
       ..sort(
-        (a, b) =>
-            (b.period.year * 100 + b.period.month)
-                .compareTo(a.period.year * 100 + a.period.month),
+        (a, b) => (b.period.year * 100 + b.period.month)
+            .compareTo(a.period.year * 100 + a.period.month),
       );
 
     if (months.isEmpty) {
@@ -323,8 +360,7 @@ class FinancialSummary {
     if (withinAvailable.isNotEmpty) {
       final labels = withinAvailable
           .map(
-            (month) =>
-                '${_monthName(month.period.month)} ${month.period.year}',
+            (month) => '${_monthName(month.period.month)} ${month.period.year}',
           )
           .join(', ');
       buffer.writeln('Within available money months: $labels');
@@ -382,7 +418,8 @@ class FinancialSummary {
         }
 
         if (existing.broken || !isUnderBudget) {
-          streakByCategory[actual.categoryName] = existing.copyWith(broken: true);
+          streakByCategory[actual.categoryName] =
+              existing.copyWith(broken: true);
           continue;
         }
 

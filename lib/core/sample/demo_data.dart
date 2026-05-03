@@ -114,13 +114,13 @@ class DemoData {
   ];
 
   // ── Mortgage (tracked separately for overpayment simulation) ──
-  // Balance/rate are estimates – update with your actual figures.
-  static const Mortgage mortgage = Mortgage(
+  static final Mortgage mortgage = Mortgage(
     id: 'mortgage',
     name: 'Mortgage',
-    balance: 80000,
+    startDate: DateTime(2021, 1, 15),
+    originalLoanAmount: 100000,
+    mortgageTermMonths: 360,
     annualRate: 4.5,
     monthlyPayment: 442,
-    remainingTermMonths: 276,
   );
 }

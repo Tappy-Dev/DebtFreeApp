@@ -9,6 +9,7 @@ class BudgetSnapshot {
     required this.mortgagePayment,
     required this.salarySacrificeNetCost,
     required this.remainingCash,
+    this.totalRecurringExtraDebtPayments = 0,
   });
 
   final double totalIncome;
@@ -22,4 +23,6 @@ class BudgetSnapshot {
   final double mortgagePayment;
   final double salarySacrificeNetCost;
   final double remainingCash;
+  /// Sum of active recurring extra debt payments set via the debt slider.
+  final double totalRecurringExtraDebtPayments;
 }

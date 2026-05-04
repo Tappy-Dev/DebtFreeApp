@@ -206,7 +206,8 @@ class DriftSchema {
       owned_share_percent REAL NOT NULL DEFAULT 100,
       monthly_rent REAL NOT NULL DEFAULT 0,
       monthly_service_charge REAL NOT NULL DEFAULT 0,
-      monthly_ground_rent REAL NOT NULL DEFAULT 0
+      monthly_ground_rent REAL NOT NULL DEFAULT 0,
+      overpayment_start_date TEXT
     )
   ''';
 

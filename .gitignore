@@ -47,3 +47,10 @@ app.*.map.json
 # Personal/private files
 payslip-*.pdf
 payslip-*.txt
+
+# Local test output artifacts
+/test/*results*.txt
+/test/debts_errors.txt
+
+# Local root-level asset copy
+/logo_new.png

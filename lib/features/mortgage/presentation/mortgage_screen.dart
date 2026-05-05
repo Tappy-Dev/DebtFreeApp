@@ -306,31 +306,6 @@ class _MortgageScreenState extends State<MortgageScreen> {
                 _buildDealExpiryBanner(context, selectedMortgage),
                 const SizedBox(height: 4),
 
-                // ── Balance banner ──
-                Container(
-                  width: double.infinity,
-                  padding:
-                      const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
-                  decoration: BoxDecoration(
-                    color: theme.colorScheme.primaryContainer,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('Outstanding Balance',
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: theme.colorScheme.onPrimaryContainer,
-                          )),
-                      const SizedBox(height: 4),
-                      Text(_currencyFormat.format(detail.balance),
-                          style: theme.textTheme.headlineSmall?.copyWith(
-                            fontWeight: FontWeight.bold,
-                            color: theme.colorScheme.onPrimaryContainer,
-                          )),
-                    ],
-                  ),
-                ),
                 if (selectedMortgage.ownershipType ==
                     MortgageOwnershipType.sharedOwnership) ...[
                   const SizedBox(height: 10),
@@ -893,6 +868,7 @@ class _MortgageScreenState extends State<MortgageScreen> {
 
     showDialog<void>(
       context: context,
+      barrierDismissible: false,
       builder: (BuildContext dialogContext) {
         return StatefulBuilder(
           builder: (BuildContext context,
@@ -1028,7 +1004,10 @@ class _MortgageScreenState extends State<MortgageScreen> {
                       keyboardType:
                           const TextInputType.numberWithOptions(decimal: true),
                       decoration: const InputDecoration(
-                        labelText: 'Original loan amount',
+                        labelText: 'Loan amount',
+                        helperText:
+                            'Use your current outstanding balance if you have already remortgaged or made payments.',
+                        helperMaxLines: 2,
                         prefixText: '£',
                       ),
                     ),
@@ -1811,6 +1790,7 @@ class _MortgageScreenState extends State<MortgageScreen> {
 
     showDialog<void>(
       context: context,
+      barrierDismissible: false,
       builder: (BuildContext dialogContext) {
         return StatefulBuilder(
           builder: (BuildContext ctx,

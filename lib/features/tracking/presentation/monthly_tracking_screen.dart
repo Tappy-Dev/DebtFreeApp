@@ -510,6 +510,7 @@ class _MonthlyTrackingScreenState extends State<MonthlyTrackingScreen> {
 
     final result = await showDialog<double>(
       context: context,
+      barrierDismissible: false,
       builder: (context) => AlertDialog(
         title: Text(actual.categoryName),
         content: TextField(
@@ -563,6 +564,7 @@ class _MonthlyTrackingScreenState extends State<MonthlyTrackingScreen> {
 
     final result = await showDialog<Map<String, dynamic>>(
       context: context,
+      barrierDismissible: false,
       builder: (context) => AlertDialog(
         title: const Text('Add Extra Income'),
         content: Column(
@@ -637,6 +639,7 @@ class _MonthlyTrackingScreenState extends State<MonthlyTrackingScreen> {
 
     final result = await showDialog<Map<String, dynamic>>(
       context: context,
+      barrierDismissible: false,
       builder: (context) => AlertDialog(
         title: const Text('Add Expense'),
         content: Column(
@@ -712,6 +715,7 @@ class _MonthlyTrackingScreenState extends State<MonthlyTrackingScreen> {
 
     final result = await showDialog<Map<String, dynamic>>(
       context: context,
+      barrierDismissible: false,
       builder: (context) {
         return StatefulBuilder(builder: (context, setDialogState) {
           return AlertDialog(
@@ -1153,6 +1157,7 @@ class _MonthlyTrackingScreenState extends State<MonthlyTrackingScreen> {
 
     final result = await showDialog<double>(
       context: context,
+      barrierDismissible: false,
       builder: (context) => AlertDialog(
         title: const Text('Adjust Opening Balance'),
         content: TextField(

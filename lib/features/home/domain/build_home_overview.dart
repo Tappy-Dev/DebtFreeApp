@@ -271,7 +271,9 @@ class BuildHomeOverview {
       name: mortgages.length == 1
           ? mortgages.first.name
           : '${mortgages.length} mortgages',
-      startDate: mortgages.first.startDate,
+      // Use DateTime.now() so elapsedMonths == 0 and remainingTermMonths ==
+      // longestTerm, preventing double-subtraction of elapsed months.
+      startDate: DateTime.now(),
       originalLoanAmount: mortgages.fold<double>(
           0, (sum, m) => sum + m.originalLoanAmount),
       mortgageTermMonths: longestTerm,

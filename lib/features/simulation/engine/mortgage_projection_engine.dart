@@ -67,6 +67,10 @@ class MortgageProjectionEngine {
     final effectiveOverpaymentStart =
         mortgage.overpaymentStartDate ?? overpaymentStartDate;
 
+    final isInterestOnly =
+        mortgage.repaymentType == MortgageRepaymentType.interestOnly;
+    final termEnd = mortgage.remainingTermMonths; // balloon payment month index
+
     for (int i = 0; i < effectiveMax; i++) {
       if (balance <= 0) break;
 
@@ -78,12 +82,19 @@ class MortgageProjectionEngine {
       final interest = balance * monthlyRate;
       totalInterest += interest;
 
-      final scheduledPrincipal = mortgage.monthlyPayment - interest;
-      final maxPrincipal = balance;
-      final double principalPaid = math.min(
-        math.max(0.0, scheduledPrincipal),
-        maxPrincipal,
-      ).toDouble();
+      double principalPaid;
+      if (isInterestOnly && i == termEnd - 1) {
+        // Final month of an interest-only mortgage: the full capital is repaid
+        // as a lump sum (balloon payment).
+        principalPaid = balance;
+      } else {
+        final scheduledPrincipal = mortgage.monthlyPayment - interest;
+        final maxPrincipal = balance;
+        principalPaid = math.min(
+          math.max(0.0, scheduledPrincipal),
+          maxPrincipal,
+        ).toDouble();
+      }
       balance -= principalPaid;
 
       double overpaymentApplied = 0;
@@ -92,7 +103,11 @@ class MortgageProjectionEngine {
             effectiveOverpaymentStart.year,
             effectiveOverpaymentStart.month,
           ));
-      if (totalOverpayment > 0 && balance > 0 && overpaymentActive) {
+      // Overpayments reduce capital early even on interest-only mortgages.
+      if (!isInterestOnly &&
+          totalOverpayment > 0 &&
+          balance > 0 &&
+          overpaymentActive) {
         overpaymentApplied = math.min(totalOverpayment, balance).toDouble();
         balance -= overpaymentApplied;
       }

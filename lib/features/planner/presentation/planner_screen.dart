@@ -492,6 +492,7 @@ class _PlannerScreenState extends State<PlannerScreen> {
   Future<PlannerEvent?> _showEventDialog({PlannerEvent? existing}) {
     return showDialog<PlannerEvent>(
       context: context,
+      barrierDismissible: false,
       builder: (context) => _EventDialog(
         existing: existing,
         labelForType: _labelForType,

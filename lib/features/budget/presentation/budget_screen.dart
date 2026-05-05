@@ -630,6 +630,7 @@ class _BudgetScreenState extends State<BudgetScreen> {
 
     final result = await showDialog<double>(
       context: context,
+      barrierDismissible: false,
       builder: (ctx) {
         return StatefulBuilder(
           builder: (ctx, setDialogState) {

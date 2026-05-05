@@ -617,6 +617,7 @@ class _DebtDetailScreenState extends State<DebtDetailScreen> {
 
     showDialog(
       context: context,
+      barrierDismissible: false,
       builder: (ctx) {
         return StatefulBuilder(
           builder: (ctx, setDialogState) {

@@ -72,6 +72,11 @@ class Mortgage {
   /// Outstanding balance calculated via amortization formula.
   double get balance {
     if (remainingTermMonths <= 0) return 0;
+    // Interest-only: the capital is never repaid through regular payments.
+    // The outstanding balance equals the original loan throughout the term.
+    if (repaymentType == MortgageRepaymentType.interestOnly) {
+      return originalLoanAmount;
+    }
     final r = annualRate / 100 / 12;
     if (r <= 0) {
       // Simple linear repayment (no interest).

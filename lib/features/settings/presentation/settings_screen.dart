@@ -486,6 +486,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
     final submitted = await showDialog<bool>(
       context: context,
+      barrierDismissible: false,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDialogState) {
           final isBug = selectedType == _typeBug;
